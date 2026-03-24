@@ -1,0 +1,71 @@
+from kaos_source._version import __version__
+from kaos_source.connectors import (
+    ArchiveConnector,
+    BrowserConnector,
+    FilesystemConnector,
+    HttpConnector,
+    MemoryConnector,
+    SourceConnector,
+)
+from kaos_source.errors import (
+    SourceAccessError,
+    SourceError,
+    SourceErrorInfo,
+    SourceMaterializationError,
+    SourceNotFoundError,
+    SourcePolicyError,
+    SourceTransientError,
+    SourceValidationError,
+)
+from kaos_source.models import (
+    SourceDescriptor,
+    SourceJob,
+    SourceJobResult,
+    SourceJobStatus,
+    SourceKind,
+    SourceLocator,
+    SourceMaterialization,
+    SourceOperation,
+    SourcePage,
+    SourcePreview,
+    SourceProvenance,
+)
+from kaos_source.options import (
+    SourceDiscoverOptions,
+    SourceMaterializeOptions,
+    SourcePreviewOptions,
+)
+from kaos_source.service import SourceService
+
+__all__ = [
+    "ArchiveConnector",
+    "BrowserConnector",
+    "FilesystemConnector",
+    "HttpConnector",
+    "MemoryConnector",
+    "SourceAccessError",
+    "SourceConnector",
+    "SourceDescriptor",
+    "SourceDiscoverOptions",
+    "SourceError",
+    "SourceErrorInfo",
+    "SourceJob",
+    "SourceJobResult",
+    "SourceJobStatus",
+    "SourceKind",
+    "SourceLocator",
+    "SourceMaterialization",
+    "SourceMaterializationError",
+    "SourceMaterializeOptions",
+    "SourceNotFoundError",
+    "SourceOperation",
+    "SourcePage",
+    "SourcePolicyError",
+    "SourcePreview",
+    "SourcePreviewOptions",
+    "SourceProvenance",
+    "SourceService",
+    "SourceTransientError",
+    "SourceValidationError",
+    "__version__",
+]
