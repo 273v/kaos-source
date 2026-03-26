@@ -114,4 +114,4 @@ include = ["kaos_source", "tests"]
 package = true
 
 [tool.uv.sources]
-kaos-core = { path = "../kaos-core" }
+kaos-core = { path = "../kaos-core", editable = true }
