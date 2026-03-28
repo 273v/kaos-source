@@ -37,6 +37,9 @@ dev = [
   "ty>=0.0.1a17",
 ]
 
+[project.scripts]
+kaos-source = "kaos_source.cli:main"
+
 [project.optional-dependencies]
 browser = [
   "playwright>=1.52.0",
