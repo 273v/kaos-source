@@ -28,6 +28,18 @@ uv sync --python 3.13 --group dev --extra browser
 uv run --python 3.13 playwright install chromium
 ```
 
+## CLI
+
+```bash
+kaos-source discover ./data/ --recursive --pattern "*.pdf"  # list sources
+kaos-source preview document.pdf --max-bytes 2048           # bounded preview
+kaos-source info document.pdf --json                        # source metadata
+kaos-source materialize document.pdf --name my-artifact     # stage to artifact store
+kaos-source inspect-archive bundle.zip                      # list archive members
+```
+
+All commands support `--json` for structured output.
+
 ## Development
 
 ```bash
