@@ -311,7 +311,7 @@ wheels = [
 
 [[package]]
 name = "kaos-core"
-source = { directory = "../kaos-core" }
+source = { editable = "../kaos-core" }
 dependencies = [
     { name = "click" },
     { name = "cryptography" },
@@ -334,7 +334,6 @@ provides-extras = ["mcp", "pydantic-ai"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "mypy", specifier = ">=1.15.0" },
     { name = "pytest", specifier = ">=8.3.5" },
     { name = "pytest-asyncio", specifier = ">=0.26.0" },
     { name = "pytest-benchmark", specifier = ">=5.1.0" },
@@ -369,7 +368,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "kaos-core", directory = "../kaos-core" },
+    { name = "kaos-core", editable = "../kaos-core" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.52.0" },
     { name = "pydantic", specifier = ">=2.11.0" },
 ]
