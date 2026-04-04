@@ -615,7 +615,12 @@ class InspectArchiveTool(KaosTool):
 
 
 def register_source_tools(runtime: KaosRuntime) -> int:
-    """Register all source tools with the runtime. Returns count."""
+    """Register all source tools with the runtime. Returns count.
+
+    Registers core discovery tools AND all data retrieval connector tools
+    (Federal Register, eCFR, GovInfo, EDGAR, PACER). This is the function
+    called by ``kaos-mcp serve --module source``.
+    """
     tools: list[KaosTool] = [
         DiscoverSourcesTool(),
         DescribeSourceTool(),
@@ -626,4 +631,18 @@ def register_source_tools(runtime: KaosRuntime) -> int:
     ]
     for tool in tools:
         runtime.tools.register_tool(tool)
-    return len(tools)
+    count = len(tools)
+
+    # Register all data retrieval connector tools
+    from kaos_source.tools_ecfr import register_ecfr_tools
+    from kaos_source.tools_edgar import register_edgar_tools
+    from kaos_source.tools_federal_register import register_federal_register_tools
+    from kaos_source.tools_govinfo import register_govinfo_tools
+    from kaos_source.tools_pacer import register_pacer_tools
+
+    count += register_federal_register_tools(runtime)
+    count += register_ecfr_tools(runtime)
+    count += register_govinfo_tools(runtime)
+    count += register_edgar_tools(runtime)
+    count += register_pacer_tools(runtime)
+    return count

@@ -38,20 +38,10 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(1)
 
     from kaos_source.tools import register_source_tools
-    from kaos_source.tools_ecfr import register_ecfr_tools
-    from kaos_source.tools_edgar import register_edgar_tools
-    from kaos_source.tools_federal_register import register_federal_register_tools
-    from kaos_source.tools_govinfo import register_govinfo_tools
-    from kaos_source.tools_pacer import register_pacer_tools
 
-    # Create runtime and register all source tools
+    # Create runtime and register all source + data retrieval tools
     runtime = KaosRuntime()
     n_tools = register_source_tools(runtime)
-    n_tools += register_federal_register_tools(runtime)
-    n_tools += register_ecfr_tools(runtime)
-    n_tools += register_govinfo_tools(runtime)
-    n_tools += register_edgar_tools(runtime)
-    n_tools += register_pacer_tools(runtime)
     print(f"Registered {n_tools} source tools", file=sys.stderr)
 
     # Configure server
