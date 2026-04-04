@@ -6,3 +6,6 @@ __pycache__/
 *.py[cod]
 dist/
 build/
+.env
+.env.test
+.env.local

@@ -39,10 +39,17 @@ dev = [
 
 [project.scripts]
 kaos-source = "kaos_source.cli:main"
+kaos-source-serve = "kaos_source.serve:main"
 
 [project.optional-dependencies]
 browser = [
   "playwright>=1.52.0",
+]
+mcp = [
+  "kaos-mcp>=0.1.0",
+]
+pacer = [
+  "lxml>=5.0.0",
 ]
 
 [project.urls]
@@ -118,3 +125,4 @@ package = true
 
 [tool.uv.sources]
 kaos-core = { path = "../kaos-core", editable = true }
+kaos-mcp = { path = "../kaos-mcp", editable = true }

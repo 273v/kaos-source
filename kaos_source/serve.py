@@ -1,0 +1,77 @@
+"""Run the KAOS MCP server with source discovery tools.
+
+Usage:
+    # stdio (for Claude Code / Claude Desktop)
+    kaos-source-serve
+
+    # streamable HTTP
+    kaos-source-serve --http --port 8000
+
+    # with debug logging
+    kaos-source-serve --debug
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Entry point for the MCP server."""
+    parser = argparse.ArgumentParser(description="KAOS MCP Server with source discovery tools")
+    parser.add_argument("--http", action="store_true", help="Use streamable HTTP transport")
+    parser.add_argument("--host", default="127.0.0.1", help="HTTP host (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=8000, help="HTTP port (default: 8000)")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    args = parser.parse_args(argv)
+
+    try:
+        from kaos_core import KaosRuntime
+        from kaos_mcp import KaosMCPServer, KaosMCPSettings
+    except ImportError:
+        print(
+            "Error: MCP server requires the 'mcp' extra.\n"
+            "Install with: pip install 'kaos-source[mcp]'",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    from kaos_source.tools import register_source_tools
+    from kaos_source.tools_ecfr import register_ecfr_tools
+    from kaos_source.tools_edgar import register_edgar_tools
+    from kaos_source.tools_federal_register import register_federal_register_tools
+    from kaos_source.tools_govinfo import register_govinfo_tools
+    from kaos_source.tools_pacer import register_pacer_tools
+
+    # Create runtime and register all source tools
+    runtime = KaosRuntime()
+    n_tools = register_source_tools(runtime)
+    n_tools += register_federal_register_tools(runtime)
+    n_tools += register_ecfr_tools(runtime)
+    n_tools += register_govinfo_tools(runtime)
+    n_tools += register_edgar_tools(runtime)
+    n_tools += register_pacer_tools(runtime)
+    print(f"Registered {n_tools} source tools", file=sys.stderr)
+
+    # Configure server
+    settings = KaosMCPSettings(
+        name="kaos-source-server",
+        transport="streamable-http" if args.http else "stdio",
+        host=args.host,
+        port=args.port,
+        debug=args.debug,
+    )
+
+    server = KaosMCPServer(runtime=runtime, settings=settings)
+
+    if args.http:
+        print(f"Starting HTTP server on {args.host}:{args.port}/mcp", file=sys.stderr)
+        server.run_streamable_http()
+    else:
+        print("Starting stdio server", file=sys.stderr)
+        server.run_stdio()
+
+
+if __name__ == "__main__":
+    main()

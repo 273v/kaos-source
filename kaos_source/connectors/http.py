@@ -86,6 +86,24 @@ class HttpConnector(SourceConnector):
         self._domain_rate_locks: dict[str, asyncio.Lock] = {}
         self._domain_last_request_at: dict[str, float] = {}
 
+    def _settings_for(self, context: KaosContext) -> Any:
+        """Load typed HTTP settings from context, falling back to constructor defaults."""
+        from kaos_source.settings import KaosSourceHttpSettings
+
+        # Build overrides from constructor args that differ from class defaults
+        overrides: dict[str, Any] = {}
+        if self._max_concurrent_per_domain != 2:
+            overrides["max_concurrent_per_domain"] = self._max_concurrent_per_domain
+        if self._user_agent != "kaos-source/0.1":
+            overrides["user_agent"] = self._user_agent
+        if not self._verify_ssl:
+            overrides["verify_ssl"] = self._verify_ssl
+        if not self._follow_redirects:
+            overrides["follow_redirects"] = self._follow_redirects
+        if self._http2:
+            overrides["http2"] = self._http2
+        return KaosSourceHttpSettings.from_context(context, **overrides)
+
     async def describe(self, locator: SourceLocator, context: KaosContext) -> SourceDescriptor:
         url = self._require_url(locator)
         self._assert_policy(url, context)
@@ -180,21 +198,18 @@ class HttpConnector(SourceConnector):
         context: KaosContext,
         operation: Any,
     ) -> Any:
+        s = self._settings_for(context)
         parsed = urlsplit(url)
-        timeout = float(
-            context.get_config("source_http_timeout_seconds", context.get_config("timeout", 30.0))
-        )
-        retry_limit = int(
-            context.get_config("source_http_retry_limit", context.get_config("retry_limit", 2))
-        )
-        async with self._domain_request_gate(parsed.netloc, context):
+        timeout = s.timeout_seconds
+        retry_limit = s.retry_limit
+        async with self._domain_request_gate(parsed.netloc, context, s):
             for attempt in range(retry_limit + 1):
                 try:
                     async with httpx.AsyncClient(
-                        follow_redirects=self._follow_redirects_for(context),
-                        headers=self._request_headers(context),
-                        verify=self._verify_ssl_for(context),
-                        http2=self._http2_for(context),
+                        follow_redirects=s.follow_redirects,
+                        headers=self._request_headers(s),
+                        verify=s.verify_ssl,
+                        http2=s.http2,
                         timeout=timeout,
                         transport=self._transport,
                     ) as client:
@@ -208,7 +223,7 @@ class HttpConnector(SourceConnector):
                     logger.info(
                         "Retrying %s (attempt %d/%d): %s", url, attempt + 2, retry_limit + 1, exc
                     )
-                    await asyncio.sleep(self._retry_delay_seconds(attempt, exc.details))
+                    await asyncio.sleep(self._retry_delay_seconds(attempt, exc.details, s))
                 except httpx.TimeoutException as exc:
                     if attempt >= retry_limit:
                         logger.warning(
@@ -225,7 +240,7 @@ class HttpConnector(SourceConnector):
                         attempt + 2,
                         retry_limit + 1,
                     )
-                    await asyncio.sleep(self._retry_delay_seconds(attempt, {}))
+                    await asyncio.sleep(self._retry_delay_seconds(attempt, {}, s))
                 except httpx.RequestError as exc:
                     if attempt >= retry_limit:
                         logger.warning(
@@ -243,12 +258,13 @@ class HttpConnector(SourceConnector):
                         retry_limit + 1,
                         exc,
                     )
-                    await asyncio.sleep(self._retry_delay_seconds(attempt, {}))
+                    await asyncio.sleep(self._retry_delay_seconds(attempt, {}, s))
         raise SourceTransientError("HTTP source request failed unexpectedly", locator=url)
 
     def _assert_policy(self, url: str, context: KaosContext) -> None:
         assert_roots_allow_uri(url, context.roots, schemes={"http", "https"})
-        allowed_hosts = context.get_config("source_http_allowed_hosts")
+        s = self._settings_for(context)
+        allowed_hosts = s.allowed_hosts
         if not allowed_hosts:
             return
         host = urlsplit(url).hostname or ""
@@ -271,16 +287,14 @@ class HttpConnector(SourceConnector):
         return locator.uri
 
     @asynccontextmanager
-    async def _domain_request_gate(self, netloc: str, context: KaosContext):
-        limit = int(
-            context.get_config(
-                "source_http_max_concurrent_per_domain", self._max_concurrent_per_domain
-            )
-        )
+    async def _domain_request_gate(self, netloc: str, context: KaosContext, s: Any = None):
+        if s is None:
+            s = self._settings_for(context)
+        limit = s.max_concurrent_per_domain
         key = (netloc.lower(), max(limit, 1))
         semaphore = self._domain_semaphores.setdefault(key, asyncio.Semaphore(key[1]))
         async with semaphore:
-            min_interval = float(context.get_config("source_http_min_interval_seconds", 0.0))
+            min_interval = s.min_interval_seconds
             if min_interval > 0:
                 domain = netloc.lower()
                 rate_lock = self._domain_rate_locks.setdefault(domain, asyncio.Lock())
@@ -292,29 +306,23 @@ class HttpConnector(SourceConnector):
                     self._domain_last_request_at[domain] = time.monotonic()
             yield
 
-    def _request_headers(self, context: KaosContext) -> dict[str, str]:
+    def _request_headers(self, s: Any) -> dict[str, str]:
+        """Build request headers from constructor defaults and typed settings."""
         headers = dict(self._default_headers)
-        configured_headers = context.get_config("source_http_headers", {})
+        configured_headers = s.headers
         if isinstance(configured_headers, Mapping):
             headers.update({str(key): str(value) for key, value in configured_headers.items()})
-        headers["User-Agent"] = str(context.get_config("source_http_user_agent", self._user_agent))
+        headers["User-Agent"] = s.user_agent
         headers.setdefault("X-Kaos-Source", "1")
         return headers
 
-    def _verify_ssl_for(self, context: KaosContext) -> bool:
-        return bool(context.get_config("source_http_verify_ssl", self._verify_ssl))
-
-    def _follow_redirects_for(self, context: KaosContext) -> bool:
-        return bool(context.get_config("source_http_follow_redirects", self._follow_redirects))
-
-    def _http2_for(self, context: KaosContext) -> bool:
-        return bool(context.get_config("source_http_http2", self._http2))
-
-    def _retry_delay_seconds(self, attempt: int, details: Mapping[str, object]) -> float:
+    def _retry_delay_seconds(
+        self, attempt: int, details: Mapping[str, object], settings: Any
+    ) -> float:
         explicit_retry_after = details.get("retry_after_seconds")
         if isinstance(explicit_retry_after, (int, float)):
             return max(0.0, float(explicit_retry_after))
-        return min(0.1 * (2**attempt), 1.0)
+        return min(settings.retry_initial_delay * (2**attempt), settings.retry_max_delay)
 
     def _descriptor_from_response(
         self,

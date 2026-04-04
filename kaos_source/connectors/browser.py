@@ -65,6 +65,28 @@ class BrowserConnector(SourceConnector):
         self._max_concurrent_per_domain = max_concurrent_per_domain
         self._domain_semaphores: dict[tuple[str, int], asyncio.Semaphore] = {}
 
+    def _settings_for(self, context: KaosContext) -> Any:
+        """Load typed browser settings from context, falling back to constructor defaults."""
+        from kaos_source.settings import KaosSourceBrowserSettings
+
+        # Build overrides from constructor args that differ from class defaults
+        overrides: dict[str, Any] = {}
+        if self._max_concurrent_per_domain != 1:
+            overrides["max_concurrent_per_domain"] = self._max_concurrent_per_domain
+        if self._user_agent != "kaos-source-browser/0.1":
+            overrides["user_agent"] = self._user_agent
+        if not self._headless:
+            overrides["headless"] = self._headless
+        if self._timeout_ms != 30_000:
+            overrides["timeout_ms"] = self._timeout_ms
+        if self._wait_until != "networkidle":
+            overrides["wait_until"] = self._wait_until
+        if not self._take_screenshot:
+            overrides["take_screenshot"] = self._take_screenshot
+        if not self._screenshot_full_page:
+            overrides["screenshot_full_page"] = self._screenshot_full_page
+        return KaosSourceBrowserSettings.from_context(context, **overrides)
+
     async def describe(self, locator: SourceLocator, context: KaosContext) -> SourceDescriptor:
         return await self._with_page(
             locator,
@@ -116,6 +138,7 @@ class BrowserConnector(SourceConnector):
         options: SourceMaterializeOptions | None = None,
     ) -> SourceMaterialization:
         options = options or SourceMaterializeOptions()
+        s = self._settings_for(context)
 
         async def run(page: Any, response: Any) -> SourceMaterialization:
             descriptor = await self._descriptor_from_page(locator, page, response)
@@ -133,9 +156,9 @@ class BrowserConnector(SourceConnector):
             logger.debug(
                 "Materialized browser HTML for %s (%d bytes)", locator.uri, primary.bytes_written
             )
-            if self._take_screenshot_for(context):
+            if s.take_screenshot:
                 screenshot = await page.screenshot(
-                    full_page=self._screenshot_full_page_for(context),
+                    full_page=s.screenshot_full_page,
                     type="png",
                 )
                 screenshot_descriptor = SourceDescriptor(
@@ -197,10 +220,11 @@ class BrowserConnector(SourceConnector):
     ) -> Any:
         url = self._require_url(locator)
         self._assert_policy(url, context)
+        s = self._settings_for(context)
         logger.debug("Navigating browser to %s", url)
         parsed = urlsplit(url)
         async with (
-            self._domain_gate(parsed.netloc, context),
+            self._domain_gate(parsed.netloc, s),
             self._playwright_context() as playwright,
         ):
             browser_launcher = getattr(playwright, self._browser_type, None)
@@ -209,18 +233,18 @@ class BrowserConnector(SourceConnector):
                     "Unsupported browser type",
                     browser_type=self._browser_type,
                 )
-            browser = await browser_launcher.launch(headless=self._headless_for(context))
+            browser = await browser_launcher.launch(headless=s.headless)
             browser_context = await browser.new_context(
-                user_agent=self._user_agent_for(context),
-                extra_http_headers=self._extra_headers_for(context),
-                ignore_https_errors=self._ignore_https_errors_for(context),
+                user_agent=s.user_agent,
+                extra_http_headers=self._extra_headers_for(s),
+                ignore_https_errors=s.ignore_https_errors,
             )
             page = await browser_context.new_page()
             try:
                 response = await page.goto(
                     url,
-                    wait_until=self._wait_until_for(context),
-                    timeout=self._timeout_ms_for(context),
+                    wait_until=s.wait_until,
+                    timeout=s.timeout_ms,
                 )
                 if response is None:
                     logger.warning("Browser navigation returned no response for %s", url)
@@ -293,9 +317,14 @@ class BrowserConnector(SourceConnector):
 
     def _assert_policy(self, url: str, context: KaosContext) -> None:
         assert_roots_allow_uri(url, context.roots, schemes={"http", "https"})
-        allowed_hosts = context.get_config("source_browser_allowed_hosts")
+        s = self._settings_for(context)
+        allowed_hosts = s.allowed_hosts
         if allowed_hosts is None:
-            allowed_hosts = context.get_config("source_http_allowed_hosts")
+            # Fall back to HTTP settings for allowed_hosts
+            from kaos_source.settings import KaosSourceHttpSettings
+
+            http_s = KaosSourceHttpSettings.from_context(context)
+            allowed_hosts = http_s.allowed_hosts
         if not allowed_hosts:
             return
         host = urlsplit(url).hostname or ""
@@ -330,44 +359,18 @@ class BrowserConnector(SourceConnector):
             yield playwright
 
     @asynccontextmanager
-    async def _domain_gate(self, netloc: str, context: KaosContext):
-        limit = int(
-            context.get_config(
-                "source_browser_max_concurrent_per_domain", self._max_concurrent_per_domain
-            )
-        )
+    async def _domain_gate(self, netloc: str, s: Any):
+        limit = s.max_concurrent_per_domain
         key = (netloc.lower(), max(1, limit))
         semaphore = self._domain_semaphores.setdefault(key, asyncio.Semaphore(key[1]))
         async with semaphore:
             yield
 
-    def _user_agent_for(self, context: KaosContext) -> str:
-        return str(context.get_config("source_browser_user_agent", self._user_agent))
-
-    def _extra_headers_for(self, context: KaosContext) -> dict[str, str]:
+    def _extra_headers_for(self, s: Any) -> dict[str, str]:
+        """Build extra HTTP headers from constructor defaults and typed settings."""
         headers = dict(self._extra_headers)
-        configured_headers = context.get_config("source_browser_headers", {})
+        configured_headers = s.headers
         if isinstance(configured_headers, Mapping):
             headers.update({str(key): str(value) for key, value in configured_headers.items()})
         headers.setdefault("X-Kaos-Source", "1")
         return headers
-
-    def _headless_for(self, context: KaosContext) -> bool:
-        return bool(context.get_config("source_browser_headless", self._headless))
-
-    def _timeout_ms_for(self, context: KaosContext) -> int:
-        return int(context.get_config("source_browser_timeout_ms", self._timeout_ms))
-
-    def _wait_until_for(self, context: KaosContext) -> str:
-        return str(context.get_config("source_browser_wait_until", self._wait_until))
-
-    def _take_screenshot_for(self, context: KaosContext) -> bool:
-        return bool(context.get_config("source_browser_take_screenshot", self._take_screenshot))
-
-    def _screenshot_full_page_for(self, context: KaosContext) -> bool:
-        return bool(
-            context.get_config("source_browser_screenshot_full_page", self._screenshot_full_page)
-        )
-
-    def _ignore_https_errors_for(self, context: KaosContext) -> bool:
-        return bool(context.get_config("source_browser_ignore_https_errors", False))

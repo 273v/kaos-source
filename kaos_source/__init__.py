@@ -36,6 +36,12 @@ from kaos_source.options import (
     SourcePreviewOptions,
 )
 from kaos_source.service import SourceService
+from kaos_source.tools import register_source_tools
+from kaos_source.tools_ecfr import register_ecfr_tools
+from kaos_source.tools_edgar import register_edgar_tools
+from kaos_source.tools_federal_register import register_federal_register_tools
+from kaos_source.tools_govinfo import register_govinfo_tools
+from kaos_source.tools_pacer import register_pacer_tools
 
 __all__ = [
     "ArchiveConnector",
@@ -68,4 +74,10 @@ __all__ = [
     "SourceTransientError",
     "SourceValidationError",
     "__version__",
+    "register_ecfr_tools",
+    "register_edgar_tools",
+    "register_federal_register_tools",
+    "register_govinfo_tools",
+    "register_pacer_tools",
+    "register_source_tools",
 ]
