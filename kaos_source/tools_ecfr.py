@@ -126,18 +126,22 @@ class ECFRStructureTool(KaosTool):
         title = inputs["title"]
         max_depth = inputs.get("depth", 2)
 
-        from datetime import date as dt_date
-
-        date_str = inputs.get("date") or dt_date.today().isoformat()
-
-        from kaos_source.connectors.ecfr import KaosSourceECFRSettings, get_title_structure
+        from kaos_source.connectors.ecfr import (
+            KaosSourceECFRSettings,
+            get_latest_date,
+            get_title_structure,
+        )
 
         s = KaosSourceECFRSettings()
+        date_str = inputs.get("date")
+        if not date_str:
+            date_str = await get_latest_date(title, settings=s)
+
         try:
             root = await get_title_structure(title, date_str, settings=s)
         except Exception as exc:
             return ToolResult.create_error(
-                f"Failed to fetch structure for Title {title}: {exc}. "
+                f"Failed to fetch structure for Title {title} (date={date_str}): {exc}. "
                 "Verify the title number is valid (1-50). "
                 "Use kaos-source-ecfr-titles to see all available titles."
             )
@@ -240,13 +244,16 @@ class ECFRContentTool(KaosTool):
                 "Use kaos-source-ecfr-structure to browse available sections."
             )
 
-        from datetime import date as dt_date
-
-        date_str = inputs.get("date") or dt_date.today().isoformat()
-
-        from kaos_source.connectors.ecfr import KaosSourceECFRSettings, get_section_content
+        from kaos_source.connectors.ecfr import (
+            KaosSourceECFRSettings,
+            get_latest_date,
+            get_section_content,
+        )
 
         s = KaosSourceECFRSettings()
+        date_str = inputs.get("date")
+        if not date_str:
+            date_str = await get_latest_date(title, settings=s)
         try:
             content = await get_section_content(
                 title, date_str, section=section, part=part, format=fmt, settings=s
@@ -339,11 +346,16 @@ class ECFRSearchTool(KaosTool):
                 "query is required. Provide a search term to match in section labels."
             )
 
-        from datetime import date as dt_date
+        from kaos_source.connectors.ecfr import (
+            KaosSourceECFRSettings,
+            get_latest_date,
+            get_title_structure,
+        )
 
-        date_str = inputs.get("date") or dt_date.today().isoformat()
-
-        from kaos_source.connectors.ecfr import KaosSourceECFRSettings, get_title_structure
+        s = KaosSourceECFRSettings()
+        date_str = inputs.get("date")
+        if not date_str:
+            date_str = await get_latest_date(title, settings=s)
 
         s = KaosSourceECFRSettings()
         try:

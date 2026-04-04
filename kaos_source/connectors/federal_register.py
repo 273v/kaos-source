@@ -445,4 +445,21 @@ async def fetch_document_content(
 
     if format == "pdf":
         return resp.content
-    return resp.text
+
+    text = resp.text
+
+    # The "text" format returns HTML-wrapped <pre> content — strip HTML tags
+    if format == "text" and "<html" in text[:200].lower():
+        import re
+
+        # Extract content from <pre> tags if present
+        pre_match = re.search(r"<pre[^>]*>(.*)</pre>", text, re.DOTALL)
+        if pre_match:
+            text = pre_match.group(1)
+        # Strip remaining HTML tags
+        text = re.sub(r"<[^>]+>", "", text)
+        # Decode HTML entities
+        text = text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+        text = text.replace("&quot;", '"').replace("&#39;", "'")
+
+    return text

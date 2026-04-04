@@ -194,6 +194,29 @@ async def get_titles(
     return [_parse_title(t) for t in data.get("titles", [])]
 
 
+async def get_latest_date(
+    title: int,
+    *,
+    settings: KaosSourceECFRSettings | None = None,
+) -> str:
+    """Get the most recent available date for a CFR title.
+
+    Falls back to 30 days ago if the titles API fails or the title has no date.
+    """
+    from datetime import date as dt_date
+    from datetime import timedelta
+
+    try:
+        titles = await get_titles(settings=settings)
+        for t in titles:
+            if t.number == title and t.latest_issue_date:
+                return t.latest_issue_date
+    except Exception:
+        pass
+    # Safe fallback: 30 days ago (eCFR lags a few weeks behind current date)
+    return (dt_date.today() - timedelta(days=30)).isoformat()
+
+
 async def get_agencies(
     *,
     settings: KaosSourceECFRSettings | None = None,
