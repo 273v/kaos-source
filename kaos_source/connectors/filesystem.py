@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from pathlib import Path, PurePosixPath
 
 from kaos_core import KaosContext
+from kaos_core.logging import get_logger
 
 from kaos_source.connectors.base import (
     SourceConnector,
@@ -33,6 +34,8 @@ from kaos_source.options import (
     SourcePreviewOptions,
 )
 
+logger = get_logger(__name__)
+
 
 class FilesystemConnector(SourceConnector):
     kind = SourceKind.FILESYSTEM
@@ -40,6 +43,7 @@ class FilesystemConnector(SourceConnector):
 
     async def describe(self, locator: SourceLocator, context: KaosContext) -> SourceDescriptor:
         source_path = Path(self._require_path(locator))
+        logger.debug("Describing filesystem source %s", source_path)
         resolved = await asyncio.to_thread(ensure_file_exists, source_path)
         assert_roots_allow_path(resolved, context.roots)
         return await asyncio.to_thread(self._descriptor_for_path, resolved)
@@ -63,12 +67,16 @@ class FilesystemConnector(SourceConnector):
             return SourcePage(items=[descriptor])
 
         root_directory = await asyncio.to_thread(ensure_directory, resolved)
+        logger.debug(
+            "Discovering filesystem directory %s (limit=%d)", root_directory, options.limit
+        )
         page_items, next_cursor = await asyncio.to_thread(
             self._discover_directory_page,
             root_directory,
             options,
             start_offset,
         )
+        logger.debug("Discovered %d items in %s", len(page_items), root_directory)
         return SourcePage(items=page_items, next_cursor=next_cursor)
 
     async def preview(
@@ -110,6 +118,7 @@ class FilesystemConnector(SourceConnector):
             )
         source_path = Path(self._require_path(locator))
         resolved = await asyncio.to_thread(ensure_regular_file, source_path)
+        logger.debug("Materializing filesystem source %s (%s bytes)", resolved, descriptor.size)
         return await self._materialize_local_path(
             source_path=resolved,
             context=context,
@@ -220,6 +229,7 @@ class FilesystemConnector(SourceConnector):
             with source_path.open("rb") as handle:
                 return handle.read(max_bytes)
         except OSError as exc:
+            logger.warning("Failed to read preview for %s: %s", source_path, exc)
             raise SourceAccessError(
                 "Failed to read filesystem source preview", path=str(source_path)
             ) from exc

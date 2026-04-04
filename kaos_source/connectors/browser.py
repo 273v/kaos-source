@@ -10,6 +10,7 @@ from typing import Any, Protocol
 from urllib.parse import urlsplit
 
 from kaos_core import KaosContext
+from kaos_core.logging import get_logger
 
 from kaos_source.connectors.base import SourceConnector, assert_roots_allow_uri, decode_cursor
 from kaos_source.errors import SourceAccessError, SourcePolicyError, SourceValidationError
@@ -26,6 +27,8 @@ from kaos_source.options import (
     SourceMaterializeOptions,
     SourcePreviewOptions,
 )
+
+logger = get_logger(__name__)
 
 
 class BrowserPlaywrightFactory(Protocol):
@@ -127,6 +130,9 @@ class BrowserConnector(SourceConnector):
 
             related_artifacts = list(primary.related_artifacts)
             total_bytes = primary.bytes_written
+            logger.debug(
+                "Materialized browser HTML for %s (%d bytes)", locator.uri, primary.bytes_written
+            )
             if self._take_screenshot_for(context):
                 screenshot = await page.screenshot(
                     full_page=self._screenshot_full_page_for(context),
@@ -191,6 +197,7 @@ class BrowserConnector(SourceConnector):
     ) -> Any:
         url = self._require_url(locator)
         self._assert_policy(url, context)
+        logger.debug("Navigating browser to %s", url)
         parsed = urlsplit(url)
         async with (
             self._domain_gate(parsed.netloc, context),
@@ -216,9 +223,12 @@ class BrowserConnector(SourceConnector):
                     timeout=self._timeout_ms_for(context),
                 )
                 if response is None:
+                    logger.warning("Browser navigation returned no response for %s", url)
                     raise SourceAccessError(
                         "Browser navigation did not return a response", locator=url
                     )
+                status = getattr(response, "status", None)
+                logger.debug("Browser loaded %s (status=%s)", url, status)
                 return await operation(page, response)
             finally:
                 await browser_context.close()
@@ -312,6 +322,7 @@ class BrowserConnector(SourceConnector):
         try:
             async_api = importlib.import_module("playwright.async_api")
         except ImportError as exc:
+            logger.warning("Playwright not installed — browser connector unavailable")
             raise SourceValidationError(
                 "Playwright is required for browser sources. Install the browser extra first."
             ) from exc

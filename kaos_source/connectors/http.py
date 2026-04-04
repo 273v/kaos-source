@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from kaos_core import ArtifactRetentionPolicy, KaosContext
+from kaos_core.logging import get_logger
 
 from kaos_source.connectors.base import (
     SourceConnector,
@@ -41,6 +42,8 @@ from kaos_source.options import (
     SourceMaterializeOptions,
     SourcePreviewOptions,
 )
+
+logger = get_logger(__name__)
 
 _DEFAULT_ALLOWED_HEADERS = (
     "content-type",
@@ -86,10 +89,16 @@ class HttpConnector(SourceConnector):
     async def describe(self, locator: SourceLocator, context: KaosContext) -> SourceDescriptor:
         url = self._require_url(locator)
         self._assert_policy(url, context)
+        logger.debug("Describing HTTP source %s", url)
 
         async def load(client: httpx.AsyncClient) -> SourceDescriptor:
             head_response = await client.request("HEAD", url)
             if head_response.status_code in _HEAD_FALLBACK_STATUS_CODES:
+                logger.debug(
+                    "HEAD returned %d for %s, falling back to range GET",
+                    head_response.status_code,
+                    url,
+                )
                 range_headers = {"range": "bytes=0-0"}
                 get_response = await client.request("GET", url, headers=range_headers)
                 self._raise_for_status(get_response, url)
@@ -121,6 +130,7 @@ class HttpConnector(SourceConnector):
         options = options or SourcePreviewOptions()
         url = self._require_url(locator)
         self._assert_policy(url, context)
+        logger.debug("Previewing HTTP source %s (max_bytes=%d)", url, options.max_bytes)
 
         async def load(client: httpx.AsyncClient) -> tuple[SourceDescriptor, bytes, bool]:
             range_headers = {"range": f"bytes=0-{options.max_bytes}"}
@@ -149,6 +159,7 @@ class HttpConnector(SourceConnector):
         options = options or SourceMaterializeOptions()
         url = self._require_url(locator)
         self._assert_policy(url, context)
+        logger.debug("Materializing HTTP source %s", url)
 
         async def load(client: httpx.AsyncClient) -> SourceMaterialization:
             async with client.stream("GET", url) as response:
@@ -190,23 +201,48 @@ class HttpConnector(SourceConnector):
                         return await operation(client)
                 except SourceTransientError as exc:
                     if attempt >= retry_limit:
+                        logger.warning(
+                            "HTTP request failed after %d attempts: %s — %s", attempt + 1, url, exc
+                        )
                         raise
+                    logger.info(
+                        "Retrying %s (attempt %d/%d): %s", url, attempt + 2, retry_limit + 1, exc
+                    )
                     await asyncio.sleep(self._retry_delay_seconds(attempt, exc.details))
                 except httpx.TimeoutException as exc:
                     if attempt >= retry_limit:
+                        logger.warning(
+                            "HTTP request timed out after %d attempts: %s", attempt + 1, url
+                        )
                         raise SourceTransientError(
                             "HTTP source request timed out",
                             locator=url,
                             timeout_seconds=timeout,
                         ) from exc
+                    logger.info(
+                        "Retrying %s after timeout (attempt %d/%d)",
+                        url,
+                        attempt + 2,
+                        retry_limit + 1,
+                    )
                     await asyncio.sleep(self._retry_delay_seconds(attempt, {}))
                 except httpx.RequestError as exc:
                     if attempt >= retry_limit:
+                        logger.warning(
+                            "HTTP request failed after %d attempts: %s — %s", attempt + 1, url, exc
+                        )
                         raise SourceTransientError(
                             "HTTP source request failed",
                             locator=url,
                             error=str(exc),
                         ) from exc
+                    logger.info(
+                        "Retrying %s after error (attempt %d/%d): %s",
+                        url,
+                        attempt + 2,
+                        retry_limit + 1,
+                        exc,
+                    )
                     await asyncio.sleep(self._retry_delay_seconds(attempt, {}))
         raise SourceTransientError("HTTP source request failed unexpectedly", locator=url)
 
@@ -372,12 +408,16 @@ class HttpConnector(SourceConnector):
                     target_relative_path, payload, context_id=context.session_id
                 )
         except OSError as exc:
+            logger.warning(
+                "Failed to write HTTP source to VFS: %s — %s", descriptor.locator.uri, exc
+            )
             raise SourceMaterializationError(
                 "Failed to materialize HTTP source into VFS",
                 locator=descriptor.locator.uri,
                 target_path=target_relative_path,
             ) from exc
 
+        logger.debug("Materialized %s (%d bytes)", descriptor.locator.uri, bytes_written)
         manifest = await context.runtime.artifacts.create_from_path(
             target_relative_path,
             context_id=context.session_id,

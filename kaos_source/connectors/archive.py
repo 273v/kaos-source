@@ -9,6 +9,7 @@ from pathlib import Path, PurePosixPath
 from typing import cast
 
 from kaos_core import KaosContext
+from kaos_core.logging import get_logger
 
 from kaos_source.connectors.base import (
     Closable,
@@ -37,6 +38,8 @@ from kaos_source.options import (
     SourcePreviewOptions,
 )
 
+logger = get_logger(__name__)
+
 
 class ArchiveConnector(SourceConnector):
     kind = SourceKind.ARCHIVE
@@ -46,6 +49,7 @@ class ArchiveConnector(SourceConnector):
         archive_path = Path(self._require_path(locator, field="archive_path"))
         resolved = await asyncio.to_thread(ensure_regular_file, archive_path)
         assert_roots_allow_path(resolved, context.roots)
+        logger.debug("Describing archive %s (member=%s)", resolved, locator.member_path)
 
         if locator.member_path is None:
             stat = await asyncio.to_thread(resolved.stat)
@@ -90,12 +94,14 @@ class ArchiveConnector(SourceConnector):
             return SourcePage(items=[await self.describe(locator, context)])
 
         start_offset = decode_cursor(options.cursor)
+        logger.debug("Discovering members in archive %s (limit=%d)", resolved, options.limit)
         items, next_cursor = await asyncio.to_thread(
             self._discover_members_page,
             resolved,
             options,
             start_offset,
         )
+        logger.debug("Discovered %d members in %s", len(items), resolved)
         return SourcePage(items=items, next_cursor=next_cursor)
 
     async def preview(
@@ -133,6 +139,7 @@ class ArchiveConnector(SourceConnector):
         descriptor = await self.describe(locator, context)
         archive_path = Path(self._require_path(locator, field="archive_path"))
         resolved = await asyncio.to_thread(ensure_regular_file, archive_path)
+        logger.debug("Materializing archive %s (member=%s)", resolved, locator.member_path)
         if locator.member_path is None:
             return await self._materialize_local_path(
                 source_path=resolved,
@@ -194,6 +201,7 @@ class ArchiveConnector(SourceConnector):
                     entries.append(self._descriptor_for_tar_member(archive_path, info))
             return entries
 
+        logger.warning("Unsupported archive format: %s", archive_path)
         raise SourceValidationError("Unsupported archive type", archive_path=str(archive_path))
 
     def _skip_member(self, member_name: str, size: int, options: SourceDiscoverOptions) -> bool:
