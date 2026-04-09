@@ -47,7 +47,7 @@ class TestFRBattle:
 
     async def test_get_specific_executive_order(self) -> None:
         """Agent: 'Get details on a specific FR document'"""
-        from kaos_source.tools_federal_register import FRSearchTool, FRGetDocumentTool
+        from kaos_source.tools_federal_register import FRGetDocumentTool, FRSearchTool
 
         # First find a presidential document
         search = FRSearchTool()
@@ -84,6 +84,7 @@ class TestFRBattle:
             }
         )
         assert not result.isError
+        assert result.structuredContent is not None
         doc_num = result.structuredContent["results"][0]["document_number"]
 
         # Read its text content
@@ -277,6 +278,7 @@ class TestGovInfoBattle:
             }
         )
         assert not result.isError
+        assert result.structuredContent is not None
         pkg_id = result.structuredContent["results"][0]["package_id"]
 
         # Get package details
@@ -347,6 +349,7 @@ class TestEdgarBattle:
         lookup = EdgarLookupTool()
         result = await lookup.execute({"ticker": "AAPL"})
         assert not result.isError
+        assert result.structuredContent is not None
         cik = result.structuredContent["cik"]
         assert "320193" in cik
 
@@ -426,6 +429,7 @@ class TestEdgarBattle:
         lookup = EdgarLookupTool()
         result = await lookup.execute({"ticker": "TSLA"})
         assert not result.isError
+        assert result.structuredContent is not None
         cik = result.structuredContent["cik"]
 
         company = EdgarCompanyTool()
@@ -449,9 +453,9 @@ class TestPacerBattle:
 
     @pytest.fixture(autouse=True)
     def _check_fixture(self) -> None:
-        import os
+        from pathlib import Path
 
-        if not os.path.exists(self._FIXTURE):
+        if not Path(self._FIXTURE).exists():
             pytest.skip("PACER fixture not available")
 
     async def test_parse_full_docket(self) -> None:

@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -22,7 +23,9 @@ pytestmark = pytest.mark.integration
 _SERVER_CMD = [sys.executable, "-m", "kaos_source.serve"]
 
 
-def _send_receive(proc: subprocess.Popen, method: str, params: dict | None = None, msg_id: int = 1) -> dict:
+def _send_receive(
+    proc: subprocess.Popen, method: str, params: dict | None = None, msg_id: int = 1
+) -> dict:
     """Send a JSON-RPC message via stdin and read the response from stdout."""
     request: dict[str, Any] = {
         "jsonrpc": "2.0",
@@ -33,6 +36,10 @@ def _send_receive(proc: subprocess.Popen, method: str, params: dict | None = Non
         request["params"] = params
 
     payload = json.dumps(request)
+    # subprocess.Popen types stdin/stdout as IO|None; the proc was constructed
+    # with stdin=PIPE / stdout=PIPE so they're guaranteed non-None — narrow for ty.
+    assert proc.stdin is not None
+    assert proc.stdout is not None
     # MCP stdio uses Content-Length framing
     message = f"Content-Length: {len(payload)}\r\n\r\n{payload}"
     proc.stdin.write(message)
@@ -68,15 +75,21 @@ def mcp_stdio():
     )
 
     # Initialize MCP session
-    resp = _send_receive(proc, "initialize", {
-        "protocolVersion": "2024-11-05",
-        "capabilities": {},
-        "clientInfo": {"name": "test-stdio", "version": "1.0"},
-    }, msg_id=0)
+    resp = _send_receive(
+        proc,
+        "initialize",
+        {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "test-stdio", "version": "1.0"},
+        },
+        msg_id=0,
+    )
     assert "result" in resp, f"Initialize failed: {resp}"
 
     # Send initialized notification
     notif = json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"})
+    assert proc.stdin is not None
     proc.stdin.write(f"Content-Length: {len(notif)}\r\n\r\n{notif}")
     proc.stdin.flush()
 
@@ -110,10 +123,15 @@ class TestMCPStdio:
 
     def test_call_fr_agencies(self, mcp_stdio: subprocess.Popen) -> None:
         """Call FR agencies tool through stdio — like Claude Code would."""
-        resp = _send_receive(mcp_stdio, "tools/call", {
-            "name": "kaos-source-fr-agencies",
-            "arguments": {},
-        }, msg_id=2)
+        resp = _send_receive(
+            mcp_stdio,
+            "tools/call",
+            {
+                "name": "kaos-source-fr-agencies",
+                "arguments": {},
+            },
+            msg_id=2,
+        )
         assert "result" in resp
         result = resp["result"]
         assert not result.get("isError", False)
@@ -124,19 +142,29 @@ class TestMCPStdio:
 
     def test_call_ecfr_titles(self, mcp_stdio: subprocess.Popen) -> None:
         """Call eCFR titles tool through stdio."""
-        resp = _send_receive(mcp_stdio, "tools/call", {
-            "name": "kaos-source-ecfr-titles",
-            "arguments": {},
-        }, msg_id=3)
+        resp = _send_receive(
+            mcp_stdio,
+            "tools/call",
+            {
+                "name": "kaos-source-ecfr-titles",
+                "arguments": {},
+            },
+            msg_id=3,
+        )
         assert "result" in resp
         assert not resp["result"].get("isError", False)
 
     def test_call_edgar_lookup(self, mcp_stdio: subprocess.Popen) -> None:
         """Look up Apple's CIK through stdio MCP — full agent workflow."""
-        resp = _send_receive(mcp_stdio, "tools/call", {
-            "name": "kaos-source-edgar-lookup",
-            "arguments": {"ticker": "MSFT"},
-        }, msg_id=4)
+        resp = _send_receive(
+            mcp_stdio,
+            "tools/call",
+            {
+                "name": "kaos-source-edgar-lookup",
+                "arguments": {"ticker": "MSFT"},
+            },
+            msg_id=4,
+        )
         assert "result" in resp
         result = resp["result"]
         assert not result.get("isError", False)
@@ -146,26 +174,36 @@ class TestMCPStdio:
 
     def test_call_fr_search(self, mcp_stdio: subprocess.Popen) -> None:
         """Search Federal Register through stdio MCP."""
-        resp = _send_receive(mcp_stdio, "tools/call", {
-            "name": "kaos-source-fr-search",
-            "arguments": {
-                "term": "environmental protection",
-                "doc_type": "RULE",
-                "per_page": 3,
+        resp = _send_receive(
+            mcp_stdio,
+            "tools/call",
+            {
+                "name": "kaos-source-fr-search",
+                "arguments": {
+                    "term": "environmental protection",
+                    "doc_type": "RULE",
+                    "per_page": 3,
+                },
             },
-        }, msg_id=5)
+            msg_id=5,
+        )
         assert "result" in resp
         result = resp["result"]
         assert not result.get("isError", False)
 
     def test_call_source_describe(self, mcp_stdio: subprocess.Popen) -> None:
         """Describe a file through stdio MCP."""
-        resp = _send_receive(mcp_stdio, "tools/call", {
-            "name": "kaos-source-describe",
-            "arguments": {
-                "path": os.path.abspath("pyproject.toml"),
+        resp = _send_receive(
+            mcp_stdio,
+            "tools/call",
+            {
+                "name": "kaos-source-describe",
+                "arguments": {
+                    "path": str(Path("pyproject.toml").resolve()),
+                },
             },
-        }, msg_id=6)
+            msg_id=6,
+        )
         assert "result" in resp
         result = resp["result"]
         assert not result.get("isError", False)
@@ -174,10 +212,15 @@ class TestMCPStdio:
 
     def test_error_handling(self, mcp_stdio: subprocess.Popen) -> None:
         """Verify error handling through stdio MCP — agent gets recovery guidance."""
-        resp = _send_receive(mcp_stdio, "tools/call", {
-            "name": "kaos-source-describe",
-            "arguments": {"path": "/nonexistent/file.txt"},
-        }, msg_id=7)
+        resp = _send_receive(
+            mcp_stdio,
+            "tools/call",
+            {
+                "name": "kaos-source-describe",
+                "arguments": {"path": "/nonexistent/file.txt"},
+            },
+            msg_id=7,
+        )
         assert "result" in resp
         result = resp["result"]
         assert result.get("isError", True)

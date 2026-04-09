@@ -55,18 +55,21 @@ class TestECFRToolsLive:
         tool = ECFRListTitlesTool()
         result = await tool.execute({})
         assert not result.isError
+        assert result.structuredContent is not None
         assert result.structuredContent["count"] >= 40
 
     async def test_structure_tool(self) -> None:
         tool = ECFRStructureTool()
         result = await tool.execute({"title": 1, "date": "2024-01-01", "depth": 2})
         assert not result.isError
+        assert result.structuredContent is not None
         assert result.structuredContent["part_count"] > 0
 
     async def test_content_tool(self) -> None:
         tool = ECFRContentTool()
         result = await tool.execute({"title": 1, "part": "1", "date": "2024-01-01"})
         assert not result.isError
+        assert result.structuredContent is not None
         assert len(result.structuredContent["content"]) > 100
 
     async def test_search_tool(self) -> None:

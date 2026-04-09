@@ -77,6 +77,7 @@ class TestGovInfoToolsLive:
         search_tool = GovInfoSearchTool()
         search_result = await search_tool.execute({"query": "budget", "page_size": 1})
         assert not search_result.isError
+        assert search_result.structuredContent is not None
         pkg_id = search_result.structuredContent["results"][0]["package_id"]
 
         tool = GovInfoGetPackageTool()

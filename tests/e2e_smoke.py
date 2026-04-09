@@ -6,6 +6,7 @@ Run with: uv run python tests/e2e_smoke.py
 import asyncio
 import os
 import sys
+from pathlib import Path
 
 
 async def main() -> None:
@@ -41,7 +42,11 @@ async def main() -> None:
     print("FEDERAL REGISTER")
     print("=" * 60)
     try:
-        from kaos_source.connectors.federal_register import get_agencies, get_document, search_documents
+        from kaos_source.connectors.federal_register import (
+            get_agencies,
+            get_document,
+            search_documents,
+        )
 
         fr = await search_documents(term="securities", doc_type="RULE", per_page=3)
         print(f"  search 'securities RULE': {fr.count} results")
@@ -113,14 +118,14 @@ async def main() -> None:
     print("=" * 60)
     print("PACER (local parser)")
     print("=" * 60)
-    fixture = "tests/fixtures/pacer_docket1.html"
-    if not os.path.exists(fixture):
+    fixture = Path("tests/fixtures/pacer_docket1.html")
+    if not fixture.exists():
         print("  SKIPPED (no fixture)")
     else:
         try:
             from kaos_source.parsers.pacer import parse_docket
 
-            html = open(fixture, encoding="utf-8", errors="replace").read()
+            html = fixture.read_text(encoding="utf-8", errors="replace")
             docket = parse_docket(html)
             print(f"  case: {docket.case_number}")
             print(f"  parties: {docket.plaintiff} v. {docket.defendant}")

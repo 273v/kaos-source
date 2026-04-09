@@ -8,12 +8,12 @@ Run with: GOVINFO_API_KEY=xxx pytest tests/integration/test_mcp_e2e.py -v
 
 from __future__ import annotations
 
-import asyncio
 import os
 import signal
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -124,7 +124,7 @@ class TestMCPEndToEnd:
 
     async def test_initialize(self, mcp_server: Any) -> None:
         """MCP: Initialize session."""
-        session_id = await _init_session()
+        await _init_session()
         # Session ID may or may not be present depending on MCP version
         # What matters is the server responds
 
@@ -199,7 +199,7 @@ class TestMCPEndToEnd:
             params={
                 "name": "kaos-source-discover",
                 "arguments": {
-                    "path": os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "path": str(Path(__file__).resolve().parent.parent),
                     "patterns": ["*.py"],
                     "limit": 5,
                 },

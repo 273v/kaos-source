@@ -104,6 +104,7 @@ class TestFRToolsLive:
         tool = FRSearchTool()
         search = await tool.execute({"per_page": 1})
         assert not search.isError
+        assert search.structuredContent is not None
         doc_num = search.structuredContent["results"][0]["document_number"]
 
         # Then fetch it
