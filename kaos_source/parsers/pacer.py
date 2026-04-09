@@ -14,6 +14,10 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
+from kaos_core.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class DocumentLink:
@@ -63,6 +67,7 @@ class DocketInfo:
     jurisdiction: str | None = None
     docket_entries: list[DocketEntry] = field(default_factory=list)
     entry_count: int = 0
+    warnings: list[str] = field(default_factory=list)
 
 
 # Entry type detection patterns
@@ -218,6 +223,7 @@ def parse_docket(html_content: str) -> DocketInfo:
 
     # --- Docket entries ---
     entries: list[DocketEntry] = []
+    warnings: list[str] = []
     docket_table = None
     for table in doc.xpath("//table"):
         tc = table.text_content()
@@ -226,7 +232,7 @@ def parse_docket(html_content: str) -> DocketInfo:
             break
 
     if docket_table is not None:
-        for row in docket_table.xpath(".//tr")[1:]:
+        for row_index, row in enumerate(docket_table.xpath(".//tr")[1:], start=1):
             cells = row.xpath(".//td")
             if len(cells) < 3:
                 continue
@@ -254,11 +260,15 @@ def parse_docket(html_content: str) -> DocketInfo:
                         filing_info=_extract_filing_info(docket_text),
                     )
                 )
-            except Exception:
+            except Exception as exc:
+                warning = f"Skipping malformed PACER docket row {row_index}: {exc}"
+                warnings.append(warning)
+                logger.warning(warning)
                 continue
 
     return DocketInfo(
         **case_info,
         docket_entries=entries,
         entry_count=len(entries),
+        warnings=warnings,
     )

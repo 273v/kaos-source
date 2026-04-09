@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from kaos_core import KaosRuntime
 
-from kaos_source.connectors.ecfr import ECFRStructureNode, ECFRTitle
+from kaos_source.connectors.ecfr import ECFRStructureNode, ECFRTitle, get_latest_date
 from kaos_source.tools_ecfr import (
     ECFRContentTool,
     ECFRListTitlesTool,
@@ -124,6 +124,34 @@ class TestListTitles:
         result = await tool.execute({})
         assert result.isError
         assert "unavailable" in (result.text or "").lower()
+
+
+class TestLatestDateFallback:
+    @patch("kaos_source.connectors.ecfr.get_titles", new_callable=AsyncMock)
+    @patch("kaos_source.connectors.ecfr.logger.warning")
+    async def test_logs_when_titles_lookup_fails(
+        self, mock_warn: AsyncMock, mock_get: AsyncMock
+    ) -> None:
+        mock_get.side_effect = RuntimeError("API down")
+
+        value = await get_latest_date(40)
+
+        assert isinstance(value, str)
+        mock_warn.assert_called_once()
+        assert "Falling back to a synthetic latest eCFR date" in mock_warn.call_args[0][0]
+
+    @patch("kaos_source.connectors.ecfr.get_titles", new_callable=AsyncMock)
+    @patch("kaos_source.connectors.ecfr.logger.warning")
+    async def test_logs_when_title_has_no_latest_issue_date(
+        self, mock_warn: AsyncMock, mock_get: AsyncMock
+    ) -> None:
+        mock_get.return_value = [ECFRTitle(number=40, name="Protection", latest_issue_date=None)]
+
+        value = await get_latest_date(40)
+
+        assert isinstance(value, str)
+        mock_warn.assert_called_once()
+        assert "no latest_issue_date was available" in mock_warn.call_args[0][0]
 
 
 # ---------------------------------------------------------------------------

@@ -108,9 +108,12 @@ class PacerParseDocketTool(KaosTool):
             "jurisdiction": docket.jurisdiction,
             "entry_count": docket.entry_count,
             "docket_entries": entries,
+            "warnings": docket.warnings,
         }
 
         summary = f"{docket.case_number}: {docket.case_title} — {docket.entry_count} entries"
+        if docket.warnings:
+            summary += f" ({len(docket.warnings)} warnings)"
         return ToolResult.create_success(output=output, summary=summary)
 
 
@@ -210,6 +213,7 @@ class PacerFilterEntriesTool(KaosTool):
             "total_entries": docket.entry_count,
             "filtered_count": len(result_entries),
             "entries": result_entries,
+            "warnings": docket.warnings,
         }
 
         summary = f"{len(result_entries)} of {docket.entry_count} entries matched"

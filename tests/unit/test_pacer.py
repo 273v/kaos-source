@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from kaos_core import KaosRuntime
@@ -81,6 +82,36 @@ class TestParser:
         types = {e.entry_type for e in docket.docket_entries if e.entry_type}
         assert len(types) > 0
 
+    @patch("kaos_source.parsers.pacer.logger.warning")
+    def test_malformed_row_emits_warning_instead_of_silent_drop(self, mock_warn) -> None:
+        from kaos_source.parsers.pacer import parse_docket
+
+        html = """\
+<html>
+  <body>
+    <a href="DktRpt.pl?case=1">1:24-cv-00001</a>
+    <table><tr><td>Alice v. Bob</td></tr></table>
+    <table>
+      <tr><td>Date Filed: 01/01/2024</td></tr>
+      <tr><td>Nature of Suit: Contract</td></tr>
+    </table>
+    <table>
+      <tr><th>Date Filed</th><th>#</th><th>Docket Text</th></tr>
+      <tr><td>01/02/2024</td><td>1</td><td>COMPLAINT filed</td></tr>
+      <tr><td>not-a-date</td><td>2</td><td>Broken row</td></tr>
+    </table>
+  </body>
+</html>
+"""
+
+        docket = parse_docket(html)
+
+        assert docket.entry_count == 1
+        assert len(docket.warnings) == 1
+        assert "Skipping malformed PACER docket row" in docket.warnings[0]
+        mock_warn.assert_called_once()
+        assert "Skipping malformed PACER docket row" in mock_warn.call_args[0][0]
+
 
 # ---------------------------------------------------------------------------
 # PacerParseDocketTool
@@ -95,6 +126,7 @@ class TestParseTool:
         assert result.structuredContent is not None
         assert result.structuredContent["case_number"]
         assert result.structuredContent["entry_count"] > 0
+        assert "warnings" in result.structuredContent
 
     async def test_file_not_found(self) -> None:
         tool = PacerParseDocketTool()

@@ -381,6 +381,7 @@ markdown = [
 requires-dist = [
     { name = "duckdb", marker = "extra == 'duckdb'", specifier = ">=1.0.0" },
     { name = "kaos-core", editable = "../kaos-core" },
+    { name = "kaos-mcp", marker = "extra == 'mcp'", editable = "../kaos-mcp" },
     { name = "kaos-nlp-core", marker = "extra == 'nlp'", editable = "../kaos-nlp-core" },
     { name = "lxml", marker = "extra == 'html'", specifier = ">=5.0.0" },
     { name = "markdown-it-py", extras = ["plugins"], marker = "extra == 'markdown'", specifier = ">=3.0.0" },
@@ -391,10 +392,11 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.11.0" },
     { name = "uuid6", marker = "python_full_version < '3.14'", specifier = ">=2024.7.10" },
 ]
-provides-extras = ["duckdb", "html", "images", "layout", "markdown", "nlp", "polars"]
+provides-extras = ["duckdb", "html", "images", "layout", "markdown", "mcp", "nlp", "polars"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "kaos-office", extras = ["xlsx-calamine"], editable = "../kaos-office" },
     { name = "pytest", specifier = ">=8.3.5" },
     { name = "pytest-asyncio", specifier = ">=0.26.0" },
     { name = "pytest-cov", specifier = ">=6.0.0" },

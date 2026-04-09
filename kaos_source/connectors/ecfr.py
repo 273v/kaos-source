@@ -202,6 +202,8 @@ async def get_latest_date(
     """Get the most recent available date for a CFR title.
 
     Falls back to 30 days ago if the titles API fails or the title has no date.
+    The fallback is logged so callers can distinguish a real eCFR date from
+    a degraded best-effort default.
     """
     from datetime import date as dt_date
     from datetime import timedelta
@@ -211,8 +213,17 @@ async def get_latest_date(
         for t in titles:
             if t.number == title and t.latest_issue_date:
                 return t.latest_issue_date
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "Falling back to a synthetic latest eCFR date for title %s after titles lookup failed: %s",
+            title,
+            exc,
+        )
+    else:
+        logger.warning(
+            "Falling back to a synthetic latest eCFR date for title %s because no latest_issue_date was available",
+            title,
+        )
     # Safe fallback: 30 days ago (eCFR lags a few weeks behind current date)
     return (dt_date.today() - timedelta(days=30)).isoformat()
 
