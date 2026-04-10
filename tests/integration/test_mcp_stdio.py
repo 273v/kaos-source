@@ -31,10 +31,12 @@ _READ_TIMEOUT = 30.0  # seconds to wait for server response
 def _read_one_line(proc: subprocess.Popen, timeout: float = _READ_TIMEOUT) -> str:
     """Read one newline-terminated line from binary stdout with a timeout.
 
-    The ``mcp`` Python library (v1.27.0+) uses **newline-delimited JSON**
-    for its stdio transport — each JSON-RPC message is one line terminated
-    by ``\\n``. It does NOT use Content-Length framing (the earlier MCP
-    spec required it; the library's actual implementation does not). See
+    The MCP spec defines stdio transport as **newline-delimited JSON** —
+    each JSON-RPC message is one line terminated by ``\\n``, with no
+    embedded newlines. This is NOT the same as LSP's Content-Length
+    framing (``Content-Length: N\\r\\n\\r\\n<body>``), which is a common
+    source of confusion since MCP "takes inspiration from LSP." The
+    ``mcp`` Python library (v1.27.0+) correctly implements the spec: see
     ``mcp.server.stdio.stdin_reader`` which does ``async for line in
     stdin`` and ``mcp.server.stdio.stdout_writer`` which writes
     ``json + "\\n"``.
