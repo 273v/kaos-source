@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import json
 import os
+import select
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -23,10 +25,44 @@ pytestmark = pytest.mark.integration
 _SERVER_CMD = [sys.executable, "-m", "kaos_source.serve"]
 
 
+_READ_TIMEOUT = 30.0  # seconds to wait for server response
+
+
+def _read_one_message(proc: subprocess.Popen, timeout: float = _READ_TIMEOUT) -> dict:
+    """Read a single Content-Length framed JSON-RPC message from the server.
+
+    Uses select() to enforce a timeout so the test fails fast instead of
+    hanging forever when the server doesn't respond.
+    """
+    assert proc.stdout is not None
+    header = ""
+    deadline = timeout
+    while True:
+        ready, _, _ = select.select([proc.stdout], [], [], deadline)
+        if not ready:
+            raise TimeoutError(
+                f"MCP server did not send data within {timeout}s (partial header: {header!r})"
+            )
+        ch = proc.stdout.read(1)
+        if not ch:
+            raise RuntimeError("Server closed stdout")
+        header += ch
+        if header.endswith("\r\n\r\n"):
+            break
+
+    content_length = int(header.split("Content-Length:")[1].strip().split("\r\n")[0])
+    body = proc.stdout.read(content_length)
+    return json.loads(body)
+
+
 def _send_receive(
     proc: subprocess.Popen, method: str, params: dict | None = None, msg_id: int = 1
 ) -> dict:
-    """Send a JSON-RPC message via stdin and read the response from stdout."""
+    """Send a JSON-RPC message via stdin and read the response from stdout.
+
+    Skips any server-initiated notifications (messages without an ``id``)
+    that arrive before the actual response.
+    """
     request: dict[str, Any] = {
         "jsonrpc": "2.0",
         "id": msg_id,
@@ -45,19 +81,23 @@ def _send_receive(
     proc.stdin.write(message)
     proc.stdin.flush()
 
-    # Read response with Content-Length framing
-    header = ""
+    # Read messages, skipping any notifications (no "id" field) until we get
+    # the actual response matching our request.
     while True:
-        ch = proc.stdout.read(1)
-        if not ch:
-            raise RuntimeError("Server closed stdout")
-        header += ch
-        if header.endswith("\r\n\r\n"):
-            break
+        msg = _read_one_message(proc)
+        # Notifications have no "id" — skip them
+        if "id" not in msg:
+            continue
+        return msg
 
-    content_length = int(header.split("Content-Length:")[1].strip().split("\r\n")[0])
-    body = proc.stdout.read(content_length)
-    return json.loads(body)
+
+def _drain_stderr(stream) -> None:
+    """Read and discard stderr in a background thread to prevent pipe deadlock."""
+    try:
+        while stream.read(4096):
+            pass
+    except (OSError, ValueError):
+        pass
 
 
 @pytest.fixture(scope="module")
@@ -73,6 +113,13 @@ def mcp_stdio():
         text=True,
         bufsize=0,
     )
+
+    # Drain stderr in a background thread to prevent pipe buffer deadlock.
+    # When stderr's OS pipe buffer (~64 KB) fills, the child blocks on write
+    # and stops processing stdin — classic subprocess deadlock.
+    assert proc.stderr is not None
+    stderr_thread = threading.Thread(target=_drain_stderr, args=(proc.stderr,), daemon=True)
+    stderr_thread.start()
 
     # Initialize MCP session
     resp = _send_receive(
