@@ -60,6 +60,31 @@ SourceLocator -> SourceService -> SourceConnector (filesystem/archive/http/brows
 - Parses saved PACER docket HTML files — no network access, no PACER account needed
 - Requires `[pacer]` extra (lxml)
 
+### GLEIF (Global Legal Entity Identifier, no auth)
+- 2 MCP tools: `kaos-source-gleif-search`, `kaos-source-gleif-get`
+- Public GLEIF API, no authentication required
+- Returns LEI, legal name, jurisdiction, registered/HQ addresses, entity status, registration authority
+- Covers ~2.5M entities globally including financial institutions and public companies
+- API: `https://api.gleif.org/api/v1`
+
+## Entity & Forensic Parsers
+
+### VCard parser (no deps beyond stdlib + pydantic)
+- 1 MCP tool: `kaos-source-vcard-parse`
+- RFC 6350 (v4.0), RFC 2426 (v3.0), and vCard 2.1 support including quoted-printable encoding
+- Parser: `kaos_source/parsers/vcard.py` — ported from kelvin-legal-intelligence
+- Models in the same file: `VCardModel`, `VCardName`, `VCardAddress`, `VCardEmail`, etc.
+
+### Email/eDiscovery forensics (stdlib only except Pillow for images)
+- 5 MCP tools in `kaos_source/tools_forensics.py`:
+  - `kaos-source-parse-eml` — parse .eml files (stdlib `email.parser`), extracts envelope, body text+HTML, attachments with MD5, threading via Message-ID/In-Reply-To/References, full forensic header analysis (Received chain, SPF/DKIM/DMARC, Return-Path, X-Mailer, X-Originating-IP, transit time)
+  - `kaos-source-parse-mbox` — parse .mbox archives (stdlib `mailbox`)
+  - `kaos-source-email-forensics` — header-only forensic analysis (subset of parse-eml)
+  - `kaos-source-image-metadata` — EXIF/GPS extraction from JPEG/TIFF/PNG/WebP via Pillow. Includes camera make/model, datetime, GPS coords (decimal + Google Maps link), software fingerprint, exposure settings. Handles EXIF sub-IFD (0x8769) and GPS sub-IFD (0x8825).
+  - `kaos-source-file-metadata` — generic file metadata via stdlib: size, timestamps, MIME via `mimetypes` + magic bytes, MD5/SHA-256/BLAKE2b checksums
+- Parsers live in `kaos_source/parsers/`: `eml.py`, `mbox.py`, `file_meta.py`, `image_meta.py`
+- Test fixtures in `tests/fixtures/forensics/`: real Enron corpus messages (FERC public record), GOVCERT-LU eml_parser samples (BSD), SpamScope samples (Apache 2.0), Apache Forrest dev MBOX. See `tests/fixtures/forensics/README.md`.
+
 ## Core MCP Tools (6)
 
 All tools follow kaos-core `KaosTool` ABC. Register with `register_source_tools(runtime)`.
