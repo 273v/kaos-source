@@ -58,12 +58,6 @@ class KaosSourceECFRSettings(ModuleSettings):
     )
 
 
-def _get_settings(settings: KaosSourceECFRSettings | None = None) -> KaosSourceECFRSettings:
-    if settings is not None:
-        return settings
-    return KaosSourceECFRSettings()
-
-
 def _api_headers(settings: KaosSourceECFRSettings) -> dict[str, str]:
     return {"User-Agent": settings.user_agent, "Accept": "application/json"}
 
@@ -181,7 +175,7 @@ async def get_titles(
     Returns:
         List of ECFRTitle objects.
     """
-    s = _get_settings(settings)
+    s = KaosSourceECFRSettings.resolve(settings)
 
     async with httpx.AsyncClient(
         timeout=s.timeout,
@@ -237,7 +231,7 @@ async def get_agencies(
     Returns:
         List of ECFRAgency objects.
     """
-    s = _get_settings(settings)
+    s = KaosSourceECFRSettings.resolve(settings)
 
     async with httpx.AsyncClient(
         timeout=s.timeout,
@@ -266,7 +260,7 @@ async def get_title_structure(
     Returns:
         Root ECFRStructureNode with children.
     """
-    s = _get_settings(settings)
+    s = KaosSourceECFRSettings.resolve(settings)
 
     async with httpx.AsyncClient(
         timeout=s.timeout,
@@ -301,7 +295,7 @@ async def get_section_content(
     Returns:
         Content string (HTML or XML).
     """
-    s = _get_settings(settings)
+    s = KaosSourceECFRSettings.resolve(settings)
 
     if format == "xml":
         url = f"{_BASE_URL}/versioner/v1/full/{date}/title-{title}.xml"

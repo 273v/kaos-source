@@ -71,12 +71,6 @@ class KaosSourceEdgarSettings(ModuleSettings):
     )
 
 
-def _get_settings(settings: KaosSourceEdgarSettings | None = None) -> KaosSourceEdgarSettings:
-    if settings is not None:
-        return settings
-    return KaosSourceEdgarSettings()
-
-
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
@@ -251,7 +245,7 @@ async def search_filings(
     Returns:
         EdgarSearchResponse with filings and pagination.
     """
-    s = _get_settings(settings)
+    s = KaosSourceEdgarSettings.resolve(settings)
     params: dict[str, str | int] = {
         "size": min(size, 100),
         "from": offset,
@@ -312,7 +306,7 @@ async def get_company(
     Returns:
         EdgarCompany with info and filings.
     """
-    s = _get_settings(settings)
+    s = KaosSourceEdgarSettings.resolve(settings)
     cik_padded = cik.zfill(10)
 
     async with httpx.AsyncClient(
@@ -361,7 +355,7 @@ async def lookup_ticker(
     Returns:
         Dict with cik, ticker, title, or None if not found.
     """
-    s = _get_settings(settings)
+    s = KaosSourceEdgarSettings.resolve(settings)
     ticker_upper = ticker.upper()
 
     async with httpx.AsyncClient(
@@ -396,7 +390,7 @@ async def fetch_filing_document(
     Returns:
         Raw HTML string of the filing's primary document.
     """
-    s = _get_settings(settings)
+    s = KaosSourceEdgarSettings.resolve(settings)
     url = filing.file_url
     if not url:
         msg = f"Filing {filing.accession_number} has no file_url"

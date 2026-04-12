@@ -82,12 +82,6 @@ class KaosSourceGovInfoSettings(ModuleSettings):
         raise ValueError(msg)
 
 
-def _get_settings(settings: KaosSourceGovInfoSettings | None = None) -> KaosSourceGovInfoSettings:
-    if settings is not None:
-        return settings
-    return KaosSourceGovInfoSettings()
-
-
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
@@ -249,7 +243,7 @@ async def search(
     Returns:
         GovInfoSearchResponse with results and pagination.
     """
-    s = _get_settings(settings)
+    s = KaosSourceGovInfoSettings.resolve(settings)
     api_key = s.get_api_key()
 
     body: dict[str, Any] = {
@@ -298,7 +292,7 @@ async def get_package(
     Returns:
         GovInfoPackage with full metadata.
     """
-    s = _get_settings(settings)
+    s = KaosSourceGovInfoSettings.resolve(settings)
     api_key = s.get_api_key()
 
     async with httpx.AsyncClient(
@@ -325,7 +319,7 @@ async def get_collections(
     Returns:
         List of GovInfoCollection objects.
     """
-    s = _get_settings(settings)
+    s = KaosSourceGovInfoSettings.resolve(settings)
     api_key = s.get_api_key()
 
     async with httpx.AsyncClient(

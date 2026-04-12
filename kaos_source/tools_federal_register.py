@@ -307,7 +307,11 @@ class FRGetContentTool(KaosTool):
         try:
             content = await fetch_document_content(doc, format=fmt, settings=s)
         except ValueError as exc:
-            return ToolResult.create_error(str(exc))
+            return ToolResult.create_error(
+                f"Failed to fetch {fmt} content for FR document '{doc_num}': {exc}. "
+                "Verify the document number is correct and try a different format "
+                "(text, xml, html). Use kaos-source-fr-search to find valid document numbers."
+            )
         except Exception as exc:
             return ToolResult.create_error(
                 f"Failed to fetch {fmt} content for '{doc_num}': {exc}. "

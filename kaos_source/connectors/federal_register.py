@@ -106,13 +106,6 @@ class KaosSourceFRSettings(ModuleSettings):
     )
 
 
-def _get_settings(settings: KaosSourceFRSettings | None = None) -> KaosSourceFRSettings:
-    """Get or create FR settings (lazy, from env)."""
-    if settings is not None:
-        return settings
-    return KaosSourceFRSettings()
-
-
 def _api_headers(settings: KaosSourceFRSettings) -> dict[str, str]:
     """Standard headers for FR API requests."""
     return {"User-Agent": settings.user_agent, "Accept": "application/json"}
@@ -287,7 +280,7 @@ async def search_documents(
     Returns:
         FRSearchResult with documents and pagination info.
     """
-    s = _get_settings(settings)
+    s = KaosSourceFRSettings.resolve(settings)
     params: list[tuple[str, str | int | float | None]] = []
 
     # Field selection
@@ -364,7 +357,7 @@ async def get_document(
     Raises:
         httpx.HTTPStatusError: If document not found (404).
     """
-    s = _get_settings(settings)
+    s = KaosSourceFRSettings.resolve(settings)
     params: list[tuple[str, str | int | float | None]] = [("fields[]", f) for f in _DETAIL_FIELDS]
 
     async with httpx.AsyncClient(
@@ -390,7 +383,7 @@ async def get_agencies(
     Returns:
         List of FRAgency objects.
     """
-    s = _get_settings(settings)
+    s = KaosSourceFRSettings.resolve(settings)
 
     async with httpx.AsyncClient(
         timeout=s.timeout,
@@ -422,7 +415,7 @@ async def fetch_document_content(
     Raises:
         ValueError: If format is unknown or URL not available.
     """
-    s = _get_settings(settings)
+    s = KaosSourceFRSettings.resolve(settings)
     url_map = {
         "text": document.raw_text_url,
         "xml": document.full_text_xml_url,

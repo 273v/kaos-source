@@ -100,7 +100,12 @@ class GovInfoSearchTool(KaosTool):
                 settings=s,
             )
         except ValueError as exc:
-            return ToolResult.create_error(str(exc))
+            return ToolResult.create_error(
+                f"GovInfo search failed for query '{query}': {exc}. "
+                "Check that your API key is set (KAOS_SOURCE_GOVINFO_API_KEY or "
+                "GOVINFO_API_KEY). Get a free key at https://api.data.gov/signup/. "
+                "Alternative: use kaos-source-fr-search for Federal Register documents."
+            )
         except Exception as exc:
             return ToolResult.create_error(
                 f"GovInfo search failed: {exc}. "
@@ -161,7 +166,12 @@ class GovInfoGetPackageTool(KaosTool):
         try:
             pkg = await get_package(package_id, settings=s)
         except ValueError as exc:
-            return ToolResult.create_error(str(exc))
+            return ToolResult.create_error(
+                f"Failed to fetch GovInfo package '{package_id}': {exc}. "
+                "Verify the package ID is correct and your API key is set "
+                "(KAOS_SOURCE_GOVINFO_API_KEY). "
+                "Use kaos-source-govinfo-search to find valid package IDs."
+            )
         except Exception as exc:
             return ToolResult.create_error(
                 f"Failed to fetch package '{package_id}': {exc}. "
@@ -203,7 +213,12 @@ class GovInfoCollectionsTool(KaosTool):
         try:
             collections = await get_collections(settings=s)
         except ValueError as exc:
-            return ToolResult.create_error(str(exc))
+            return ToolResult.create_error(
+                f"Failed to list GovInfo collections: {exc}. "
+                "Check that your API key is set (KAOS_SOURCE_GOVINFO_API_KEY or "
+                "GOVINFO_API_KEY). Get a free key at https://api.data.gov/signup/. "
+                "Alternative: use kaos-source-govinfo-search to search across all collections."
+            )
         except Exception as exc:
             return ToolResult.create_error(
                 f"Failed to fetch collections: {exc}. "
