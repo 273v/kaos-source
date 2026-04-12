@@ -637,9 +637,9 @@ def register_source_tools(runtime: KaosRuntime) -> int:
     from kaos_source.tools_ecfr import register_ecfr_tools
     from kaos_source.tools_edgar import register_edgar_tools
     from kaos_source.tools_federal_register import register_federal_register_tools
-    from kaos_source.tools_govinfo import register_govinfo_tools
     from kaos_source.tools_forensics import register_forensics_tools
     from kaos_source.tools_gleif import register_gleif_tools
+    from kaos_source.tools_govinfo import register_govinfo_tools
     from kaos_source.tools_pacer import register_pacer_tools
     from kaos_source.tools_vcard import register_vcard_tools
 
