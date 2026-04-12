@@ -46,6 +46,11 @@ kaos-source-serve = "kaos_source.serve:main"
 browser = [
   "playwright>=1.52.0",
 ]
+content = [
+  "kaos-content>=0.1.0",
+  "kaos-nlp-core>=0.1.0",
+  "kaos-web>=0.1.0",
+]
 mcp = [
   "kaos-mcp>=0.1.0",
 ]
@@ -125,5 +130,8 @@ include = ["kaos_source", "tests"]
 package = true
 
 [tool.uv.sources]
+kaos-content = { path = "../kaos-content", editable = true }
 kaos-core = { path = "../kaos-core", editable = true }
 kaos-mcp = { path = "../kaos-mcp", editable = true }
+kaos-nlp-core = { path = "../kaos-nlp-core", editable = true }
+kaos-web = { path = "../kaos-web", editable = true }

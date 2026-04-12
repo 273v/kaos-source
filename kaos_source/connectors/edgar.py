@@ -18,7 +18,10 @@ Ported from kl3m-data/sources/us/edgar/.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from kaos_content.model.document import ContentDocument
 
 import httpx
 from kaos_core.config.module_settings import ModuleSettings
@@ -377,3 +380,67 @@ async def lookup_ticker(
                 "title": entry.get("title", ""),
             }
     return None
+
+
+async def fetch_filing_document(
+    filing: EdgarFiling,
+    *,
+    settings: KaosSourceEdgarSettings | None = None,
+) -> str:
+    """Fetch the primary document HTML of an EDGAR filing.
+
+    Args:
+        filing: An EdgarFiling from search_filings or get_company.
+        settings: Optional settings instance.
+
+    Returns:
+        Raw HTML string of the filing's primary document.
+    """
+    s = _get_settings(settings)
+    url = filing.file_url
+    if not url:
+        msg = f"Filing {filing.accession_number} has no file_url"
+        raise ValueError(msg)
+
+    async with httpx.AsyncClient(
+        timeout=max(s.timeout, 120),
+        headers={"User-Agent": s.user_agent},
+        follow_redirects=True,
+    ) as client:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        return resp.text
+
+
+def filing_html_to_document(
+    html: str,
+    *,
+    url: str = "",
+) -> ContentDocument:
+    """Convert an EDGAR filing's HTML to a ContentDocument.
+
+    EDGAR filings use Inline XBRL (iXBRL) which wraps standard HTML
+    in ``ix:`` namespace elements.  This function handles the XBRL
+    stripping automatically and uses ``extract_content=False``
+    because the entire filing body is content (there is no
+    navigation/sidebar to filter).
+
+    This is the correct entry point for parsing EDGAR filings.  Do
+    NOT use ``kaos_web.html_to_document`` directly — its readability
+    model will aggressively filter the filing's styled content.
+
+    Args:
+        html: Raw HTML string from EDGAR (may contain iXBRL).
+        url: Source URL for provenance.
+
+    Returns:
+        ContentDocument with the filing's full content as AST blocks.
+    """
+    from kaos_web import html_to_document
+
+    return html_to_document(
+        html,
+        url=url,
+        strip_xbrl=True,
+        extract_content=False,
+    )
