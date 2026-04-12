@@ -283,8 +283,8 @@ def _extract_attachments(msg: EmailMessage) -> list[Attachment]:
 
         # Get content for size + hash
         payload = part.get_payload(decode=True)
-        size = len(payload) if payload else None
-        md5 = hashlib.md5(payload).hexdigest() if payload else None
+        size = len(payload) if isinstance(payload, bytes) else None
+        md5 = hashlib.md5(payload).hexdigest() if isinstance(payload, bytes) else None
 
         attachments.append(
             Attachment(

@@ -436,11 +436,10 @@ def filing_html_to_document(
     Returns:
         ContentDocument with the filing's full content as AST blocks.
     """
-    from kaos_web import html_to_document
+    from kaos_content.parsers.html import parse_html
 
-    return html_to_document(
+    return parse_html(
         html,
         url=url,
         strip_xbrl=True,
-        extract_content=False,
     )

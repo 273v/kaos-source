@@ -219,8 +219,10 @@ class EmailForensicsTool(KaosTool):
                 if not path.exists():
                     return ToolResult.create_error(f"File not found: {path_str}")
                 result = parse_eml_file(path)
-            else:
+            elif isinstance(headers_str, (str, bytes)):
                 result = parse_eml(headers_str, include_forensics=True)
+            else:
+                return ToolResult.create_error("'headers' must be a string.")
         except Exception as exc:
             return ToolResult.create_error(f"Failed to parse email: {exc}")
 
