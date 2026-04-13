@@ -105,7 +105,7 @@ class ECFRStructureTool(KaosTool):
                     type="string",
                     description=(
                         "Date for the structure snapshot (YYYY-MM-DD). "
-                        "Defaults to today if not specified."
+                        "Defaults to the latest available date from the eCFR API."
                     ),
                     required=False,
                 ),
@@ -136,6 +136,12 @@ class ECFRStructureTool(KaosTool):
         date_str = inputs.get("date")
         if not date_str:
             date_str = await get_latest_date(title, settings=s)
+        if not date_str:
+            return ToolResult.create_error(
+                f"Could not determine the latest available date for CFR Title {title}. "
+                "The eCFR titles API did not return a latest_issue_date. "
+                "Provide an explicit 'date' parameter (YYYY-MM-DD) or retry later."
+            )
 
         try:
             root = await get_title_structure(title, date_str, settings=s)
@@ -216,7 +222,7 @@ class ECFRContentTool(KaosTool):
                 ParameterSchema(
                     name="date",
                     type="string",
-                    description="Date for the content version (YYYY-MM-DD). Defaults to today.",
+                    description="Date for the content version (YYYY-MM-DD). Defaults to the latest available date from the eCFR API.",
                     required=False,
                 ),
                 ParameterSchema(
@@ -254,6 +260,12 @@ class ECFRContentTool(KaosTool):
         date_str = inputs.get("date")
         if not date_str:
             date_str = await get_latest_date(title, settings=s)
+        if not date_str:
+            return ToolResult.create_error(
+                f"Could not determine the latest available date for CFR Title {title}. "
+                "The eCFR titles API did not return a latest_issue_date. "
+                "Provide an explicit 'date' parameter (YYYY-MM-DD) or retry later."
+            )
         try:
             content = await get_section_content(
                 title, date_str, section=section, part=part, format=fmt, settings=s
@@ -320,7 +332,7 @@ class ECFRSearchTool(KaosTool):
                 ParameterSchema(
                     name="date",
                     type="string",
-                    description="Date (YYYY-MM-DD). Defaults to today.",
+                    description="Date (YYYY-MM-DD). Defaults to the latest available date from the eCFR API.",
                     required=False,
                 ),
                 ParameterSchema(
@@ -356,8 +368,13 @@ class ECFRSearchTool(KaosTool):
         date_str = inputs.get("date")
         if not date_str:
             date_str = await get_latest_date(title, settings=s)
+        if not date_str:
+            return ToolResult.create_error(
+                f"Could not determine the latest available date for CFR Title {title}. "
+                "The eCFR titles API did not return a latest_issue_date. "
+                "Provide an explicit 'date' parameter (YYYY-MM-DD) or retry later."
+            )
 
-        s = KaosSourceECFRSettings()
         try:
             root = await get_title_structure(title, date_str, settings=s)
         except Exception as exc:

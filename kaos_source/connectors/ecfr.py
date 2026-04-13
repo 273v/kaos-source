@@ -192,16 +192,15 @@ async def get_latest_date(
     title: int,
     *,
     settings: KaosSourceECFRSettings | None = None,
-) -> str:
+) -> str | None:
     """Get the most recent available date for a CFR title.
 
-    Falls back to 30 days ago if the titles API fails or the title has no date.
-    The fallback is logged so callers can distinguish a real eCFR date from
-    a degraded best-effort default.
-    """
-    from datetime import date as dt_date
-    from datetime import timedelta
+    Returns the ``latest_issue_date`` from the eCFR titles API for the given
+    title number, or ``None`` if the API call fails or the title has no date.
 
+    Callers must handle the ``None`` case explicitly — this function never
+    fabricates a synthetic date.
+    """
     try:
         titles = await get_titles(settings=settings)
         for t in titles:
@@ -209,17 +208,17 @@ async def get_latest_date(
                 return t.latest_issue_date
     except Exception as exc:
         logger.warning(
-            "Falling back to a synthetic latest eCFR date for title %s after titles lookup failed: %s",
+            "eCFR titles lookup failed for title %s: %s",
             title,
             exc,
         )
-    else:
-        logger.warning(
-            "Falling back to a synthetic latest eCFR date for title %s because no latest_issue_date was available",
-            title,
-        )
-    # Safe fallback: 30 days ago (eCFR lags a few weeks behind current date)
-    return (dt_date.today() - timedelta(days=30)).isoformat()
+        return None
+
+    logger.debug(
+        "No latest_issue_date available for eCFR title %s",
+        title,
+    )
+    return None
 
 
 async def get_agencies(

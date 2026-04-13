@@ -128,30 +128,32 @@ class TestListTitles:
 
 class TestLatestDateFallback:
     @patch("kaos_source.connectors.ecfr.get_titles", new_callable=AsyncMock)
-    @patch("kaos_source.connectors.ecfr.logger.warning")
-    async def test_logs_when_titles_lookup_fails(
-        self, mock_warn: AsyncMock, mock_get: AsyncMock
-    ) -> None:
+    async def test_returns_none_when_titles_lookup_fails(self, mock_get: AsyncMock) -> None:
         mock_get.side_effect = RuntimeError("API down")
 
         value = await get_latest_date(40)
 
-        assert isinstance(value, str)
-        mock_warn.assert_called_once()
-        assert "Falling back to a synthetic latest eCFR date" in mock_warn.call_args[0][0]
+        assert value is None
 
     @patch("kaos_source.connectors.ecfr.get_titles", new_callable=AsyncMock)
-    @patch("kaos_source.connectors.ecfr.logger.warning")
-    async def test_logs_when_title_has_no_latest_issue_date(
-        self, mock_warn: AsyncMock, mock_get: AsyncMock
+    async def test_returns_none_when_title_has_no_latest_issue_date(
+        self, mock_get: AsyncMock
     ) -> None:
         mock_get.return_value = [ECFRTitle(number=40, name="Protection", latest_issue_date=None)]
 
         value = await get_latest_date(40)
 
-        assert isinstance(value, str)
-        mock_warn.assert_called_once()
-        assert "no latest_issue_date was available" in mock_warn.call_args[0][0]
+        assert value is None
+
+    @patch("kaos_source.connectors.ecfr.get_titles", new_callable=AsyncMock)
+    async def test_returns_date_when_available(self, mock_get: AsyncMock) -> None:
+        mock_get.return_value = [
+            ECFRTitle(number=40, name="Protection", latest_issue_date="2026-03-15")
+        ]
+
+        value = await get_latest_date(40)
+
+        assert value == "2026-03-15"
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +188,7 @@ class TestStructure:
     async def test_structure_error(self, mock_get: AsyncMock) -> None:
         mock_get.side_effect = RuntimeError("Not found")
         tool = ECFRStructureTool()
-        result = await tool.execute({"title": 99})
+        result = await tool.execute({"title": 99, "date": "2026-01-01"})
         assert result.isError
         assert "kaos-source-ecfr-titles" in (result.text or "")
 
@@ -278,6 +280,6 @@ class TestErrorMessages:
     async def test_structure_error_suggests_titles(self, mock_get: AsyncMock) -> None:
         mock_get.side_effect = RuntimeError("Not found")
         tool = ECFRStructureTool()
-        result = await tool.execute({"title": 99})
+        result = await tool.execute({"title": 99, "date": "2026-01-01"})
         assert result.isError
         assert "kaos-source-ecfr-titles" in (result.text or "")

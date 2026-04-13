@@ -17,6 +17,7 @@ Ported from kl3m-data/sources/us/edgar/.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
 import httpx
 from kaos_core.config.module_settings import ModuleSettings
 from kaos_core.logging import get_logger
+from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
 
 logger = get_logger(__name__)
@@ -58,10 +60,11 @@ class KaosSourceEdgarSettings(ModuleSettings):
     """Typed settings for the EDGAR connector.
 
     The SEC requires a descriptive User-Agent header on all requests.
-    Set ``KAOS_SOURCE_EDGAR_USER_AGENT`` to "YourCompany email@company.com".
+    Set ``KAOS_SOURCE_EDGAR_USER_AGENT`` (or legacy ``SEC_EDGAR_USER_AGENT``)
+    to ``"YourCompany email@company.com"``.
     """
 
-    user_agent: str = "273Ventures research@273ventures.com"
+    user_agent: str = ""
     timeout: float = 30.0
 
     model_config = SettingsConfigDict(
@@ -69,6 +72,32 @@ class KaosSourceEdgarSettings(ModuleSettings):
         env_file=".env",
         extra="ignore",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_env_fallback(cls, values: dict[str, Any]) -> dict[str, Any]:
+        if not values.get("user_agent"):
+            legacy = os.environ.get("SEC_EDGAR_USER_AGENT")
+            if legacy:
+                values["user_agent"] = legacy
+        return values
+
+    def require_user_agent(self) -> str:
+        """Return the user-agent string, raising a clear error if not configured.
+
+        The SEC requires an honest User-Agent header identifying your
+        organization and contact email on all EDGAR requests.
+        """
+        if not self.user_agent:
+            msg = (
+                "SEC EDGAR requires a User-Agent header identifying your organization "
+                "and contact email (e.g. 'YourCompany contact@company.com'). "
+                "Set the KAOS_SOURCE_EDGAR_USER_AGENT environment variable "
+                "(or legacy SEC_EDGAR_USER_AGENT). "
+                "See https://www.sec.gov/os/accessing-edgar-data for details."
+            )
+            raise ValueError(msg)
+        return self.user_agent
 
 
 # ---------------------------------------------------------------------------
@@ -246,6 +275,7 @@ async def search_filings(
         EdgarSearchResponse with filings and pagination.
     """
     s = KaosSourceEdgarSettings.resolve(settings)
+    ua = s.require_user_agent()
     params: dict[str, str | int] = {
         "size": min(size, 100),
         "from": offset,
@@ -267,7 +297,7 @@ async def search_filings(
 
     async with httpx.AsyncClient(
         timeout=s.timeout,
-        headers={"User-Agent": s.user_agent, "Accept": "application/json"},
+        headers={"User-Agent": ua, "Accept": "application/json"},
     ) as client:
         resp = await client.get(_EFTS_URL, params=params)
         resp.raise_for_status()
@@ -307,11 +337,12 @@ async def get_company(
         EdgarCompany with info and filings.
     """
     s = KaosSourceEdgarSettings.resolve(settings)
+    ua = s.require_user_agent()
     cik_padded = cik.zfill(10)
 
     async with httpx.AsyncClient(
         timeout=s.timeout,
-        headers={"User-Agent": s.user_agent, "Accept": "application/json"},
+        headers={"User-Agent": ua, "Accept": "application/json"},
     ) as client:
         resp = await client.get(f"{_SUBMISSIONS_URL}/CIK{cik_padded}.json")
         resp.raise_for_status()
@@ -356,11 +387,12 @@ async def lookup_ticker(
         Dict with cik, ticker, title, or None if not found.
     """
     s = KaosSourceEdgarSettings.resolve(settings)
+    ua = s.require_user_agent()
     ticker_upper = ticker.upper()
 
     async with httpx.AsyncClient(
         timeout=s.timeout,
-        headers={"User-Agent": s.user_agent, "Accept": "application/json"},
+        headers={"User-Agent": ua, "Accept": "application/json"},
     ) as client:
         resp = await client.get(_TICKERS_URL)
         resp.raise_for_status()
@@ -391,6 +423,7 @@ async def fetch_filing_document(
         Raw HTML string of the filing's primary document.
     """
     s = KaosSourceEdgarSettings.resolve(settings)
+    ua = s.require_user_agent()
     url = filing.file_url
     if not url:
         msg = f"Filing {filing.accession_number} has no file_url"
@@ -398,7 +431,7 @@ async def fetch_filing_document(
 
     async with httpx.AsyncClient(
         timeout=max(s.timeout, 120),
-        headers={"User-Agent": s.user_agent},
+        headers={"User-Agent": ua},
         follow_redirects=True,
     ) as client:
         resp = await client.get(url)
