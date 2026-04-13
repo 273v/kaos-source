@@ -323,7 +323,5 @@ class TestVCardToolLive:
     async def test_garbled_vcard_returns_error(self) -> None:
         tool = _get_vcard_tool()
         # Has BEGIN/END but no FN
-        result = await tool.execute({
-            "content": "BEGIN:VCARD\nVERSION:3.0\nEND:VCARD"
-        })
+        result = await tool.execute({"content": "BEGIN:VCARD\nVERSION:3.0\nEND:VCARD"})
         assert result.isError
