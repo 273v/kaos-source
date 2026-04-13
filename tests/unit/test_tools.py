@@ -76,7 +76,9 @@ def binary_file(tmp_path: Path) -> Path:
 class TestRegistration:
     def test_register_source_tools(self, runtime: KaosRuntime) -> None:
         count = register_source_tools(runtime)
-        assert count == 30  # 6 core + 4 FR + 4 eCFR + 3 GovInfo + 3 EDGAR + 2 PACER + 1 VCard + 2 GLEIF + 5 Forensics
+        assert (
+            count == 30
+        )  # 6 core + 4 FR + 4 eCFR + 3 GovInfo + 3 EDGAR + 2 PACER + 1 VCard + 2 GLEIF + 5 Forensics
 
     def test_register_source_tools_names(self, runtime: KaosRuntime) -> None:
         register_source_tools(runtime)
