@@ -131,7 +131,7 @@ END:VCARD
 
 class TestRealWorldVCards:
     def test_rfc_6350_example(self) -> None:
-        status, vcard, errors = parse_vcard(RFC_6350_EXAMPLE)
+        status, vcard, _errors = parse_vcard(RFC_6350_EXAMPLE)
         assert status == VCardParseStatus.SUCCESS
         assert vcard is not None
         assert vcard.version == VCardVersion.V4_0
@@ -152,7 +152,7 @@ class TestRealWorldVCards:
         assert vcard.gender.sex == "M"
 
     def test_law_firm_attorney(self) -> None:
-        status, vcard, errors = parse_vcard(LAW_FIRM_VCARD)
+        status, vcard, _errors = parse_vcard(LAW_FIRM_VCARD)
         assert status == VCardParseStatus.SUCCESS
         assert vcard is not None
         assert "Mitchell" in vcard.formatted_name
@@ -184,7 +184,7 @@ class TestRealWorldVCards:
         assert "Commercial Litigation" in vcard.note
 
     def test_vcard_21_quoted_printable(self) -> None:
-        status, vcard, errors = parse_vcard(VCARD_21_QUOTED_PRINTABLE)
+        status, vcard, _errors = parse_vcard(VCARD_21_QUOTED_PRINTABLE)
         assert status == VCardParseStatus.SUCCESS
         assert vcard is not None
         # Version 2.1 might not be in our enum — check gracefully
@@ -200,7 +200,7 @@ class TestRealWorldVCards:
         assert addr.country == "Germany"
 
     def test_vcard_with_photo(self) -> None:
-        status, vcard, errors = parse_vcard(VCARD_WITH_PHOTO)
+        status, vcard, _errors = parse_vcard(VCARD_WITH_PHOTO)
         assert status == VCardParseStatus.SUCCESS
         assert vcard is not None
         assert vcard.formatted_name == "Alex Chen"
@@ -216,7 +216,7 @@ class TestRealWorldVCards:
         assert "twitter" in platforms
 
     def test_minimal_vcard(self) -> None:
-        status, vcard, errors = parse_vcard(MINIMAL_VCARD)
+        status, vcard, _errors = parse_vcard(MINIMAL_VCARD)
         assert status == VCardParseStatus.SUCCESS
         assert vcard is not None
         assert vcard.formatted_name == "Test User"
@@ -224,7 +224,7 @@ class TestRealWorldVCards:
         assert vcard.telephones == []
 
     def test_multi_contact(self) -> None:
-        status, vcard, errors = parse_vcard(MULTI_CONTACT_VCARD)
+        status, vcard, _errors = parse_vcard(MULTI_CONTACT_VCARD)
         assert status == VCardParseStatus.SUCCESS
         assert vcard is not None
         assert vcard.formatted_name == "Maria Garcia-Lopez"
