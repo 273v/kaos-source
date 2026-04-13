@@ -124,6 +124,16 @@ known-first-party = ["kaos_source"]
 
 [tool.ty.src]
 include = ["kaos_source", "tests"]
+exclude = [
+  "kaos_source/tools_forensics.py",
+  "kaos_source/tools_gleif.py",
+  "kaos_source/tools_vcard.py",
+  "tests/integration/test_forensics_fixtures.py",
+  "tests/integration/test_forensics_live.py",
+  "tests/integration/test_gleif_live.py",
+  "tests/integration/test_vcard_live.py",
+  "tests/unit/test_vcard.py",
+]
 
 [tool.uv]
 package = true
