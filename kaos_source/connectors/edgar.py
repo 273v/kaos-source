@@ -56,15 +56,24 @@ FORM_TYPES = (
 # ---------------------------------------------------------------------------
 
 
+#: Default User-Agent for SEC EDGAR requests. SEC policy requires an honest
+#: identifier (company + contact email) on every request; this identifies
+#: KAOS. Operators should override via ``KAOS_SOURCE_EDGAR_USER_AGENT`` with
+#: their own organization + contact whenever possible.
+DEFAULT_EDGAR_USER_AGENT = "273Ventures research@273ventures.com"
+
+
 class KaosSourceEdgarSettings(ModuleSettings):
     """Typed settings for the EDGAR connector.
 
-    The SEC requires a descriptive User-Agent header on all requests.
-    Set ``KAOS_SOURCE_EDGAR_USER_AGENT`` (or legacy ``SEC_EDGAR_USER_AGENT``)
-    to ``"YourCompany email@company.com"``.
+    The SEC requires a descriptive User-Agent header on all requests. The
+    default identifies KAOS (``273Ventures research@273ventures.com``) so
+    live calls succeed out of the box; operators should override via
+    ``KAOS_SOURCE_EDGAR_USER_AGENT`` (or legacy ``SEC_EDGAR_USER_AGENT``)
+    with their own ``"YourCompany email@company.com"``.
     """
 
-    user_agent: str = ""
+    user_agent: str = DEFAULT_EDGAR_USER_AGENT
     timeout: float = 30.0
 
     model_config = SettingsConfigDict(
