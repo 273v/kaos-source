@@ -30,6 +30,10 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+  "kaos-content[html]>=0.1.0",
+  "kaos-mcp>=0.1.0",
+  "kaos-nlp-core>=0.1.0",
+  "lxml>=5.0.0",
   "pillow>=12.2.0",
   "pytest>=8.3.5",
   "pytest-asyncio>=0.26.0",
@@ -117,23 +121,12 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF", "C4", "PTH"]
-ignore = ["B008", "E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["kaos_source"]
 
 [tool.ty.src]
 include = ["kaos_source", "tests"]
-exclude = [
-  "kaos_source/tools_forensics.py",
-  "kaos_source/tools_gleif.py",
-  "kaos_source/tools_vcard.py",
-  "tests/integration/test_forensics_fixtures.py",
-  "tests/integration/test_forensics_live.py",
-  "tests/integration/test_gleif_live.py",
-  "tests/integration/test_vcard_live.py",
-  "tests/unit/test_vcard.py",
-]
 
 [tool.uv]
 package = true

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 import pytest
+from kaos_core import KaosRuntime
 
 from kaos_source.parsers.vcard import (
     VCardModel,
@@ -192,26 +193,13 @@ class TestParseVCard:
 # ── Tool tests ──────────────────────────────────────────────────────
 
 
-class _MockToolsRegistry:
-    def __init__(self) -> None:
-        self.tools: list = []
-
-    def register_tool(self, tool: object) -> None:
-        self.tools.append(tool)
-
-
-class _MockRuntime:
-    def __init__(self) -> None:
-        self.tools = _MockToolsRegistry()
-
-
 def _get_vcard_tool():
     from kaos_source.tools_vcard import register_vcard_tools
 
-    rt = _MockRuntime()
-    count = register_vcard_tools(rt)
+    runtime = KaosRuntime()
+    count = register_vcard_tools(runtime)
     assert count == 1
-    return rt.tools.tools[0]
+    return runtime.tools.list_tool_objects()[0]
 
 
 TOOL_NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+){2,}$")

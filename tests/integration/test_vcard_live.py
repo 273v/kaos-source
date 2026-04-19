@@ -9,6 +9,7 @@ Run with: pytest tests/integration/test_vcard_live.py -v
 from __future__ import annotations
 
 import pytest
+from kaos_core import KaosRuntime
 
 from kaos_source.parsers.vcard import VCardParseStatus, VCardVersion, parse_vcard
 
@@ -170,6 +171,7 @@ class TestRealWorldVCards:
         assert "smitchell" in pref[0].address
         # Address
         assert len(vcard.addresses) == 1
+        assert vcard.addresses[0].street_address is not None
         assert "Liberty Plaza" in vcard.addresses[0].street_address
         assert vcard.addresses[0].region == "NY"
         assert vcard.addresses[0].postal_code == "10006"
@@ -238,6 +240,7 @@ class TestRealWorldVCards:
         assert len(vcard.addresses) == 2
         work_addrs = [a for a in vcard.addresses if any(str(t) == "work" for t in a.types)]
         assert len(work_addrs) == 1
+        assert work_addrs[0].locality is not None
         assert "Miami" in work_addrs[0].locality
         # UID
         assert vcard.uid is not None
@@ -252,26 +255,13 @@ class TestRealWorldVCards:
 # ── MCP Tool E2E ───────────────────────────────────────────────────
 
 
-class _MockToolsRegistry:
-    def __init__(self) -> None:
-        self.tools: list = []
-
-    def register_tool(self, tool: object) -> None:
-        self.tools.append(tool)
-
-
-class _MockRuntime:
-    def __init__(self) -> None:
-        self.tools = _MockToolsRegistry()
-
-
 def _get_vcard_tool():
     from kaos_source.tools_vcard import register_vcard_tools
 
-    rt = _MockRuntime()
-    count = register_vcard_tools(rt)
+    runtime = KaosRuntime()
+    count = register_vcard_tools(runtime)
     assert count == 1
-    return rt.tools.tools[0]
+    return runtime.tools.list_tool_objects()[0]
 
 
 @pytest.mark.asyncio

@@ -15,6 +15,7 @@ import re
 from pathlib import Path
 
 import pytest
+from kaos_core import KaosRuntime
 
 pytestmark = pytest.mark.integration
 
@@ -137,26 +138,13 @@ def sample_pdf_file(tmp_path: Path) -> Path:
 # ── Mock runtime ────────────────────────────────────────────────────
 
 
-class _MockToolsRegistry:
-    def __init__(self) -> None:
-        self.tools: list = []
-
-    def register_tool(self, tool: object) -> None:
-        self.tools.append(tool)
-
-
-class _MockRuntime:
-    def __init__(self) -> None:
-        self.tools = _MockToolsRegistry()
-
-
 def _build_forensic_tools() -> dict:
     from kaos_source.tools_forensics import register_forensics_tools
 
-    rt = _MockRuntime()
-    count = register_forensics_tools(rt)
+    runtime = KaosRuntime()
+    count = register_forensics_tools(runtime)
     assert count == 5
-    return {t.metadata.name: t for t in rt.tools.tools}
+    return {tool.metadata.name: tool for tool in runtime.tools.list_tool_objects()}
 
 
 TOOLS = _build_forensic_tools()

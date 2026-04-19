@@ -65,7 +65,9 @@ class TestEnronCorpus:
         """Short internal business email from james.barker@enron.com."""
         result = parse_eml_file(FIXTURES / "enron_inbound_offers.eml")
 
+        assert result.from_address is not None
         assert result.from_address.address == "james.barker@enron.com"
+        assert len(result.to_addresses) >= 1
         assert result.to_addresses[0].address == "brad.mckay@enron.com"
         assert result.subject == "Offers"
         assert result.headers["X-Origin"] == "McKay-B"
@@ -75,6 +77,7 @@ class TestEnronCorpus:
         result = parse_eml_file(FIXTURES / "enron_mckay_reply.eml")
 
         # Brad is the sender
+        assert result.from_address is not None
         assert result.from_address.address == "brad.mckay@enron.com"
         # Subject indicates a reply
         assert result.subject is not None
@@ -88,6 +91,7 @@ class TestEnronCorpus:
 
         # Personal subject matter
         assert "fishing" in (result.subject or "").lower()
+        assert result.from_address is not None
         assert result.from_address.address == "brad.mckay@enron.com"
 
     def test_forwarded_external(self) -> None:

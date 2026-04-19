@@ -150,7 +150,8 @@ class DiscoverSourcesTool(KaosTool):
         if not path.exists():
             return ToolResult.create_error(
                 f"Path not found: {path_str}. "
-                "Verify the path is correct. Use an absolute path or relative to the working directory."
+                "Verify the path is correct. Use an absolute path or relative "
+                "to the working directory."
             )
 
         from kaos_source.models import SourceLocator

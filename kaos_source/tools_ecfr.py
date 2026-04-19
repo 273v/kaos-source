@@ -216,13 +216,18 @@ class ECFRContentTool(KaosTool):
                 ParameterSchema(
                     name="part",
                     type="string",
-                    description="Part number (e.g. '82'). Fetches entire part if no section specified.",
+                    description=(
+                        "Part number (e.g. '82'). Fetches entire part if no section specified."
+                    ),
                     required=False,
                 ),
                 ParameterSchema(
                     name="date",
                     type="string",
-                    description="Date for the content version (YYYY-MM-DD). Defaults to the latest available date from the eCFR API.",
+                    description=(
+                        "Date for the content version (YYYY-MM-DD). Defaults "
+                        "to the latest available date from the eCFR API."
+                    ),
                     required=False,
                 ),
                 ParameterSchema(
@@ -268,7 +273,12 @@ class ECFRContentTool(KaosTool):
             )
         try:
             content = await get_section_content(
-                title, date_str, section=section, part=part, format=fmt, settings=s
+                title,
+                date_str,
+                section=section,
+                part=part,
+                format=fmt,
+                settings=s,
             )
         except Exception as exc:
             return ToolResult.create_error(
@@ -332,7 +342,10 @@ class ECFRSearchTool(KaosTool):
                 ParameterSchema(
                     name="date",
                     type="string",
-                    description="Date (YYYY-MM-DD). Defaults to the latest available date from the eCFR API.",
+                    description=(
+                        "Date (YYYY-MM-DD). Defaults to the latest available "
+                        "date from the eCFR API."
+                    ),
                     required=False,
                 ),
                 ParameterSchema(
