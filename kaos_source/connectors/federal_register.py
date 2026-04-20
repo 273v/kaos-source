@@ -118,12 +118,18 @@ def _api_headers(settings: KaosSourceFRSettings) -> dict[str, str]:
 
 @dataclass(frozen=True, slots=True)
 class FRDocument:
-    """A Federal Register document (metadata)."""
+    """A Federal Register document (metadata).
 
-    document_number: str
-    title: str
-    type: str
-    publication_date: str
+    Every string field defaults to ``""`` so callers that use the
+    ``fields`` parameter to request a subset don't crash when the FR
+    API omits unrequested keys. ``document_number`` stays first for
+    ordering but is still optional to survive malformed API responses.
+    """
+
+    document_number: str = ""
+    title: str = ""
+    type: str = ""
+    publication_date: str = ""
     citation: str = ""
     abstract: str = ""
     subtype: str = ""
