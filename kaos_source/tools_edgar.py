@@ -40,7 +40,24 @@ class EdgarSearchTool(KaosTool):
             description=(
                 "Search SEC EDGAR for filings (10-K, 10-Q, 8-K, S-1, etc.) "
                 "by full-text query, company CIK, form type, and date range. "
-                "No API key required. Returns filing metadata with document URLs."
+                "No API key required. Returns filing metadata with document URLs.\n\n"
+                "RESPONSE SHAPE: returns ``filings`` array (or ``hits`` for query "
+                "searches). Each filing carries:\n"
+                "- ``accession_number`` (e.g. '0000320193-24-000123') — the SEC's "
+                "canonical filing identifier. **Use this when asked for an accession "
+                "or filing number.**\n"
+                "- ``cik`` — Central Index Key (zero-padded, e.g. '0000320193' for "
+                "Apple).\n"
+                "- ``form`` — filing form type (10-K, 10-Q, 8-K, S-1, etc.).\n"
+                "- ``filing_date`` (YYYY-MM-DD) — when filed with the SEC.\n"
+                "- ``primary_document`` — relative URL to the primary filing document.\n"
+                "- ``primary_doc_url`` — full URL to the filing document.\n"
+                "- ``company_name`` — the registrant's official name.\n\n"
+                "When the user asks for the most-recent 10-Q for a company, set "
+                "``forms='10-Q'`` and ``per_page=1`` then read "
+                "``filings[0].accession_number`` + ``filings[0].filing_date`` "
+                "directly. The fields are always populated for valid hits — do NOT "
+                "claim the response lacks the accession number."
             ),
             category=ToolCategory.DATA,
             capability=ToolCapability.QUERY,

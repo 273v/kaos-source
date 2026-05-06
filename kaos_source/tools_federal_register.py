@@ -48,7 +48,22 @@ class FRSearchTool(KaosTool):
                 "Search the Federal Register for rules, proposed rules, notices, "
                 "and presidential documents. Supports full-text search, filtering by "
                 "document type, agency, date range, CFR reference, and docket ID. "
-                "No API key required."
+                "No API key required.\n\n"
+                "RESPONSE SHAPE: returns a list of matching documents under "
+                "``results``. Each result carries:\n"
+                "- ``document_number`` (string, e.g. '2024-23733') — the canonical "
+                "Federal Register document number. **Use this field when asked for a "
+                "document number.**\n"
+                "- ``title`` — the document title.\n"
+                "- ``publication_date`` (YYYY-MM-DD) — when the document was published.\n"
+                "- ``html_url`` — link to the FR document landing page.\n"
+                "- ``agencies`` — array of agency objects with ``name`` and ``slug``.\n"
+                "- ``type`` — RULE / PRORULE / NOTICE / PRESDOCU.\n"
+                "- ``abstract`` — short summary (when available).\n\n"
+                "When the user asks for the most-recent EPA rule or similar, "
+                "set ``order=newest`` and read ``results[0].document_number`` + "
+                "``results[0].title`` directly. Do NOT claim the response lacks "
+                "a document number — it is always populated for valid hits."
             ),
             category=ToolCategory.DATA,
             capability=ToolCapability.QUERY,
