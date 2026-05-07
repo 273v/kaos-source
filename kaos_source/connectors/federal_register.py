@@ -25,9 +25,13 @@ from datetime import date
 from typing import Any
 
 import httpx
-from kaos_core.config.module_settings import ModuleSettings
 from kaos_core.logging import get_logger
-from pydantic_settings import SettingsConfigDict
+
+# Settings live in kaos_source.settings/ after Track 1 chunk 3. Re-exported
+# here so existing callers that did
+# ``from kaos_source.connectors.federal_register import KaosSourceFRSettings``
+# continue to resolve.
+from kaos_source.settings.federal_register import KaosSourceFRSettings
 
 logger = get_logger(__name__)
 
@@ -79,31 +83,6 @@ _DETAIL_FIELDS = [
     "proclamation_number",
     "volume",
 ]
-
-
-# ---------------------------------------------------------------------------
-# Settings
-# ---------------------------------------------------------------------------
-
-
-class KaosSourceFRSettings(ModuleSettings):
-    """Typed settings for the Federal Register connector.
-
-    Env vars use the ``KAOS_SOURCE_FR_`` prefix:
-    - ``KAOS_SOURCE_FR_TIMEOUT`` — API metadata request timeout (seconds)
-    - ``KAOS_SOURCE_FR_CONTENT_TIMEOUT`` — Content download timeout (seconds)
-    - ``KAOS_SOURCE_FR_USER_AGENT`` — User-Agent header string
-    """
-
-    timeout: float = 30.0
-    content_timeout: float = 120.0
-    user_agent: str = "kaos-source/0.1 (https://273ventures.com)"
-
-    model_config = SettingsConfigDict(
-        env_prefix="KAOS_SOURCE_FR_",
-        env_file=".env",
-        extra="ignore",
-    )
 
 
 def _api_headers(settings: KaosSourceFRSettings) -> dict[str, str]:

@@ -24,38 +24,17 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
-from kaos_core.config.module_settings import ModuleSettings
 from kaos_core.logging import get_logger
-from pydantic_settings import SettingsConfigDict
+
+# Settings live in kaos_source.settings/ after Track 1 chunk 3. Re-exported
+# here so existing callers that did
+# ``from kaos_source.connectors.ecfr import KaosSourceECFRSettings`` continue
+# to resolve.
+from kaos_source.settings.ecfr import KaosSourceECFRSettings
 
 logger = get_logger(__name__)
 
 _BASE_URL = "https://www.ecfr.gov/api"
-
-
-# ---------------------------------------------------------------------------
-# Settings
-# ---------------------------------------------------------------------------
-
-
-class KaosSourceECFRSettings(ModuleSettings):
-    """Typed settings for the eCFR connector.
-
-    Env vars use the ``KAOS_SOURCE_ECFR_`` prefix:
-    - ``KAOS_SOURCE_ECFR_TIMEOUT`` — Metadata API timeout (seconds)
-    - ``KAOS_SOURCE_ECFR_CONTENT_TIMEOUT`` — Content download timeout (seconds)
-    - ``KAOS_SOURCE_ECFR_USER_AGENT`` — User-Agent header string
-    """
-
-    timeout: float = 30.0
-    content_timeout: float = 300.0  # Large titles (12, 26, 42) can be slow
-    user_agent: str = "kaos-source/0.1 (https://273ventures.com)"
-
-    model_config = SettingsConfigDict(
-        env_prefix="KAOS_SOURCE_ECFR_",
-        env_file=".env",
-        extra="ignore",
-    )
 
 
 def _api_headers(settings: KaosSourceECFRSettings) -> dict[str, str]:
