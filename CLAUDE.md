@@ -33,6 +33,54 @@ Rust-adjacent:
 
 ## Architecture
 
+After Track 1 the package mirrors the kaos-agents Track 2 layout (`base/`
++ `runtime/` + `registry/` + domain folders that auto-register).
+
+```
+kaos_source/
+  base/                # CONTRACTS — Protocols + ABCs (no impl deps)
+    protocols.py       # Closable, ReadableBinaryStream + 4 capability shapes
+    capabilities.py    # SourceCapability enum
+    metadata.py        # ConnectorMetadata, ApiMetadata, ParserMetadata (frozen pydantic)
+    api_connector.py   # ApiConnector ABC (REST APIs)
+    parser.py          # SourceParser ABC (byte-stream parsers)
+    # SourceConnector ABC currently lives in connectors/base.py for back-compat;
+    # may move to base/connector.py in a future track once test_hardening's
+    # direct-class imports migrate
+
+  runtime/             # EXECUTION MACHINERY (composes base/)
+    service.py         # SourceService (router + job queue)
+    cursor.py          # encode/decode pagination cursors
+    policy.py          # assert_roots_allow_*, ensure_*, path_matches_patterns
+    materialization.py # materialize_local_path / _stream / _bytes free functions
+    preview_decode.py  # decode_preview_payload (text/binary auto)
+    mime.py, time.py   # tiny one-purpose helpers
+
+  registry/            # CATALOGUES (explicit registration, no metaclass magic)
+    connector_registry.py  # SourceKind → SourceConnector class
+    api_registry.py        # name → ApiConnector class
+    parser_registry.py     # name → SourceParser class + MIME secondary index
+
+  settings/            # ONE FILE PER ModuleSettings SUBCLASS
+    http.py, browser.py, federal_register.py, ecfr.py, edgar.py, govinfo.py
+
+  connectors/          # TRANSPORT SourceConnectors (auto-registered)
+    filesystem.py, archive.py, http.py, browser.py, memory.py
+
+  apis/                # REST ApiConnectors (auto-registered, one subpackage each)
+    federal_register/{__init__, client, models, connector, tools}.py
+    ecfr/, edgar/, govinfo/, gleif/
+
+  parsers/             # SourceParser implementations (auto-registered)
+    vcard.py
+    email/             # cluster — slot for PST/MSG (roadmap Phase 6)
+      eml.py, mbox.py, family.py
+    pacer.py
+    file_meta.py, image_meta.py
+```
+
+### Operation flow
+
 ```
 SourceLocator -> SourceService -> SourceConnector (filesystem/archive/http/browser/memory)
     -> describe() -> SourceDescriptor (metadata only)
@@ -41,7 +89,35 @@ SourceLocator -> SourceService -> SourceConnector (filesystem/archive/http/brows
     -> materialize() -> SourceMaterialization (artifact)
 ```
 
-## Connectors
+REST APIs follow a different shape (no URI addressing, parameterized by query/identifier):
+```
+ApiRegistry.get(name) -> ApiConnector class -> .search(...) / .get(...) etc.
+```
+
+### Auto-population
+
+Importing `kaos_source` chain-imports `connectors/`, `apis/`, and `parsers/` —
+each `__init__.py` calls `default_*_registry.register(...)` for its built-ins.
+After Track 1 chunk 7:
+
+```python
+import kaos_source
+print(kaos_source.default_connector_registry)
+# ConnectorRegistry(5 connectors: ['archive', 'browser', 'filesystem', 'http', 'memory'])
+print(kaos_source.default_api_registry)
+# ApiRegistry(5 apis: ['ecfr', 'edgar', 'federal_register', 'gleif', 'govinfo'])
+print(kaos_source.default_parser_registry)
+# ParserRegistry(6 parsers: [...], 8 MIME types)
+```
+
+Out-of-tree custom connectors / apis / parsers register explicitly:
+
+```python
+from kaos_source.registry import default_api_registry
+default_api_registry.register("my_api", MyApiConnector, force=True)
+```
+
+## Connectors (transport)
 
 | Connector | Kind | Purpose |
 |-----------|------|---------|

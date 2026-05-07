@@ -1,4 +1,56 @@
+"""kaos-source — KAOS-native source discovery, retrieval, and parsing.
+
+After Track 1 the package is organized as:
+
+- :mod:`kaos_source.base`        — ABCs and Protocols (the contracts)
+- :mod:`kaos_source.runtime`     — execution machinery (SourceService,
+                                   policy, materialization, ...)
+- :mod:`kaos_source.registry`    — three catalogues:
+                                   :class:`ConnectorRegistry`,
+                                   :class:`ApiRegistry`,
+                                   :class:`ParserRegistry`
+- :mod:`kaos_source.settings`    — one :class:`ModuleSettings` per file
+- :mod:`kaos_source.connectors`  — transport SourceConnector
+                                   implementations (filesystem, archive,
+                                   http, browser, memory)
+- :mod:`kaos_source.apis`        — REST ApiConnector subpackages
+                                   (federal_register, ecfr, edgar,
+                                   govinfo, gleif)
+- :mod:`kaos_source.parsers`     — SourceParser implementations
+                                   (vcard, email/{eml,mbox,family},
+                                   pacer, file_meta, image_meta)
+
+Importing this package triggers chain-imports of ``connectors``, ``apis``,
+and ``parsers``, which in turn populate the three default registries
+via their respective ``__init__.py`` files. Code that only needs the
+registry catalogue (e.g. UI introspection of "what does kaos-source
+expose?") can ``import kaos_source`` and read from the registries
+without reaching for the tool layer.
+"""
+
+# Trigger auto-registration of the apis/ and parsers/ subpackages so
+# default_api_registry and default_parser_registry are populated when
+# anyone does ``import kaos_source``. ``connectors`` is already imported
+# transitively by the SourceConnector re-export below.
+from kaos_source import apis as _apis  # noqa: F401
+from kaos_source import parsers as _parsers  # noqa: F401
 from kaos_source._version import __version__
+
+# --- ABCs + Protocols (Track 1 chunk 1) -------------------------------------
+from kaos_source.base import (
+    ApiConnector,
+    ApiMetadata,
+    Closable,
+    ConnectorMetadata,
+    ParserMetadata,
+    ReadableBinaryStream,
+    SourceCapability,
+    SourceParser,
+    SupportsGet,
+    SupportsMaterialize,
+    SupportsPreview,
+    SupportsSearch,
+)
 from kaos_source.connectors import (
     ArchiveConnector,
     BrowserConnector,
@@ -35,7 +87,17 @@ from kaos_source.options import (
     SourceMaterializeOptions,
     SourcePreviewOptions,
 )
-from kaos_source.service import SourceService
+
+# --- Registries (Track 1 chunk 4) -------------------------------------------
+from kaos_source.registry import (
+    ApiRegistry,
+    ConnectorRegistry,
+    ParserRegistry,
+    default_api_registry,
+    default_connector_registry,
+    default_parser_registry,
+)
+from kaos_source.runtime.service import SourceService
 from kaos_source.tools import register_source_tools
 from kaos_source.tools_ecfr import register_ecfr_tools
 from kaos_source.tools_edgar import register_edgar_tools
@@ -47,12 +109,22 @@ from kaos_source.tools_pacer import register_pacer_tools
 from kaos_source.tools_vcard import register_vcard_tools
 
 __all__ = [
+    "ApiConnector",
+    "ApiMetadata",
+    "ApiRegistry",
     "ArchiveConnector",
     "BrowserConnector",
+    "Closable",
+    "ConnectorMetadata",
+    "ConnectorRegistry",
     "FilesystemConnector",
     "HttpConnector",
     "MemoryConnector",
+    "ParserMetadata",
+    "ParserRegistry",
+    "ReadableBinaryStream",
     "SourceAccessError",
+    "SourceCapability",
     "SourceConnector",
     "SourceDescriptor",
     "SourceDiscoverOptions",
@@ -69,6 +141,7 @@ __all__ = [
     "SourceNotFoundError",
     "SourceOperation",
     "SourcePage",
+    "SourceParser",
     "SourcePolicyError",
     "SourcePreview",
     "SourcePreviewOptions",
@@ -76,7 +149,14 @@ __all__ = [
     "SourceService",
     "SourceTransientError",
     "SourceValidationError",
+    "SupportsGet",
+    "SupportsMaterialize",
+    "SupportsPreview",
+    "SupportsSearch",
     "__version__",
+    "default_api_registry",
+    "default_connector_registry",
+    "default_parser_registry",
     "register_ecfr_tools",
     "register_edgar_tools",
     "register_federal_register_tools",
