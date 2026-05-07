@@ -350,7 +350,9 @@ async def fetch_document_content(
         if format == "pdf":
             async with client.stream("GET", url) as resp:
                 raise_api_status(resp, locator=url, api="FederalRegister")
-                return await read_capped_bytes(resp)
+                # See note in apis/_http.py — httpx.Response is structurally
+                # compatible with the protocol at runtime.
+                return await read_capped_bytes(resp)  # ty: ignore[invalid-argument-type]
         text = await fetch_text(client, url, api="FederalRegister")
 
     # The "text" format returns HTML-wrapped <pre> content — strip HTML tags

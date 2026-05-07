@@ -106,7 +106,7 @@ class VCardParseTool(KaosTool):
         from kaos_source.parsers.vcard.parser import parse_vcard
 
         try:
-            status, vcard, errors = parse_vcard(content)  # type: ignore[arg-type]
+            status, vcard, errors = parse_vcard(content)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
         except Exception as exc:
             return ToolResult.create_error(
                 f"VCard parsing failed: {exc}. "

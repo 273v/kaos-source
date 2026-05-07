@@ -9,3 +9,7 @@ build/
 .env
 .env.test
 .env.local
+# Per F009 lesson #4: uv.lock is gitignored at v0.1 of any package
+# whose dev-group references unpublished siblings. Re-track at 0.1.0a2
+# once kaos-mcp ships and is added to the dev group.
+uv.lock

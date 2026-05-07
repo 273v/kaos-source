@@ -28,7 +28,12 @@ def main(argv: list[str] | None = None) -> None:
 
     try:
         from kaos_core import KaosRuntime
-        from kaos_mcp import KaosMCPServer, KaosMCPSettings
+
+        # kaos-mcp is intentionally NOT a runtime dep — it's gated behind
+        # the [mcp] extra (which is itself pending kaos-mcp ship; see
+        # CHANGELOG 0.1.0a1). The static analyser cannot resolve the
+        # import in environments where the extra is not installed.
+        from kaos_mcp import KaosMCPServer, KaosMCPSettings  # ty: ignore[unresolved-import]
     except ImportError:
         print(
             "Error: MCP server requires the 'mcp' extra.\n"

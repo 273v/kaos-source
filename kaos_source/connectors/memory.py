@@ -128,8 +128,11 @@ class MemoryConnector(SourceConnector):
         options = options or SourceMaterializeOptions()
         item = self._item(locator)
         descriptor = await self.describe(SourceLocator.memory(item.name), context)
+        # ``io.BytesIO`` is structurally a binary stream but ty's per-module
+        # type resolution rejects the lambda's return against the protocol.
+        # The runtime contract is correct; covered by unit tests.
         return await self._materialize_stream(
-            stream_factory=lambda: io.BytesIO(item.payload),
+            stream_factory=lambda: io.BytesIO(item.payload),  # ty: ignore[invalid-argument-type]
             context=context,
             descriptor=descriptor,
             options=options,

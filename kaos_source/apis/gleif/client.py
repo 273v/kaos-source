@@ -149,7 +149,8 @@ async def get_lei(
             if resp.status_code == 404:
                 return None
             raise_api_status(resp, locator=url, api="GLEIF")
-            data = await read_capped_json(resp)
+            # See note in apis/_http.py — httpx.Response is compatible at runtime.
+            data = await read_capped_json(resp)  # ty: ignore[invalid-argument-type]
 
     record = data.get("data")
     if not record:

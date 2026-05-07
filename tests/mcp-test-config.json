@@ -2,7 +2,7 @@
   "mcpServers": {
     "kaos-source": {
       "command": "uv",
-      "args": ["run", "--directory", "/home/mjbommar/projects/273v/kaos-modules/kaos-source", "kaos-source-serve"],
+      "args": ["run", "kaos-source-serve"],
       "env": {}
     }
   }

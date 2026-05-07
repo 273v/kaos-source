@@ -96,7 +96,11 @@ async def fetch_json(
     """
     async with client.stream(method, url, params=params, json=json) as resp:
         raise_api_status(resp, locator=url, api=api)
-        return await read_capped_json(resp, settings=security_settings)
+        # httpx.Response.headers is httpx.Headers (a Mapping at runtime), but
+        # ty's structural protocol check rejects it against Mapping[str, str].
+        # The contract holds at runtime; loosen the kaos-core protocol in a
+        # future release if this becomes a recurring papercut.
+        return await read_capped_json(resp, settings=security_settings)  # ty: ignore[invalid-argument-type]
 
 
 async def fetch_text(
@@ -114,5 +118,6 @@ async def fetch_text(
     """
     async with client.stream(method, url, params=params) as resp:
         raise_api_status(resp, locator=url, api=api)
-        body = await read_capped_bytes(resp, settings=security_settings)
+        # See read_capped_json note above.
+        body = await read_capped_bytes(resp, settings=security_settings)  # ty: ignore[invalid-argument-type]
         return body.decode(resp.encoding or "utf-8", errors="replace")

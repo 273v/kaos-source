@@ -10,10 +10,16 @@ Skip in CI: pytest -m "not integration"
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 
 pytestmark = pytest.mark.integration
+
+# Per-module repo root: tests/integration/test_battle.py -> ../../
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_PACKAGE_DIR = _REPO_ROOT / "kaos_source"
+_PYPROJECT = _REPO_ROOT / "pyproject.toml"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -526,7 +532,7 @@ class TestSourceBattle:
         tool = DiscoverSourcesTool()
         result = await tool.execute(
             {
-                "path": "/home/mjbommar/projects/273v/kaos-modules/kaos-source/kaos_source",
+                "path": str(_PACKAGE_DIR),
                 "patterns": ["*.py"],
                 "limit": 100,
             }
@@ -545,7 +551,7 @@ class TestSourceBattle:
         tool = PreviewSourceTool()
         result = await tool.execute(
             {
-                "path": "/home/mjbommar/projects/273v/kaos-modules/kaos-source/pyproject.toml",
+                "path": str(_PYPROJECT),
                 "max_bytes": 512,
             }
         )
@@ -561,7 +567,7 @@ class TestSourceBattle:
         tool = DescribeSourceTool()
         result = await tool.execute(
             {
-                "path": "/home/mjbommar/projects/273v/kaos-modules/kaos-source/pyproject.toml",
+                "path": str(_PYPROJECT),
             }
         )
         assert not result.isError

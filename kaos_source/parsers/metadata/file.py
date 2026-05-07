@@ -127,7 +127,7 @@ def extract_file_metadata(
         if "sha256" in checksum_algorithms:
             hashers["sha256"] = hashlib.sha256()
         if "blake2b" in checksum_algorithms:
-            hashers["blake2b"] = hashlib.blake2b()  # type: ignore[assignment]  # blake2b duck-types _Hash
+            hashers["blake2b"] = hashlib.blake2b()  # type: ignore[assignment]  # ty: ignore[invalid-assignment]  # blake2b duck-types _Hash
 
         with p.open("rb") as f:
             while True:
