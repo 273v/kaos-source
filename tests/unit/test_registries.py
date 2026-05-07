@@ -257,9 +257,32 @@ class TestParserRegistry:
         reg.register("vcard_like", _VcardLikeParser)
         assert reg.list_mime_types() == ["text/vcard", "text/x-vcard"]
 
-    def test_default_parser_registry_starts_empty(self) -> None:
-        # Parsers register themselves in chunk 6; chunk 4 leaves it empty.
-        assert len(default_parser_registry) == 0
+    def test_default_parser_registry_populated_after_chunk_6(self) -> None:
+        # Chunk 6 wired auto-registration in kaos_source/parsers/__init__.py.
+        import kaos_source.parsers  # noqa: F401  ensure chain-import has fired
+        from kaos_source.base.parser import SourceParser
+
+        for name in (
+            "vcard",
+            "eml",
+            "mbox",
+            "pacer_docket",
+            "file_metadata",
+            "image_metadata",
+        ):
+            assert name in default_parser_registry, f"{name} should be registered"
+            cls = default_parser_registry.get(name)
+            assert cls is not None
+            assert issubclass(cls, SourceParser)
+            meta = cls.metadata()
+            assert meta.name == name
+
+        # MIME secondary index — vcard / eml / mbox / image_metadata
+        # advertise types; pacer + file_metadata intentionally don't.
+        assert default_parser_registry.get_by_mime_type("text/vcard") is not None
+        assert default_parser_registry.get_by_mime_type("message/rfc822") is not None
+        assert default_parser_registry.get_by_mime_type("application/mbox") is not None
+        assert default_parser_registry.get_by_mime_type("image/jpeg") is not None
 
 
 class TestServiceConsumesRegistry:

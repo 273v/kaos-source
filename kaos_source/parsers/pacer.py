@@ -272,3 +272,43 @@ def parse_docket(html_content: str) -> DocketInfo:
         entry_count=len(entries),
         warnings=warnings,
     )
+
+
+# ---------------------------------------------------------------------------
+# SourceParser conformance (Track 1 chunk 6)
+# ---------------------------------------------------------------------------
+
+from kaos_source.base.capabilities import SourceCapability  # noqa: E402
+from kaos_source.base.metadata import ParserMetadata  # noqa: E402
+from kaos_source.base.parser import SourceParser  # noqa: E402
+
+
+class PacerParser(SourceParser):
+    """:class:`SourceParser` wrapper for :func:`parse_docket`.
+
+    Parses saved PACER docket HTML files into :class:`DocketInfo`. No
+    network access — purely local parsing of HTML the user has
+    downloaded from PACER.
+    """
+
+    @classmethod
+    def metadata(cls) -> ParserMetadata:
+        return ParserMetadata(
+            name="pacer_docket",
+            description="PACER docket HTML parser (lxml-backed).",
+            # Intentionally NOT advertising "text/html" in supported_mime_types
+            # to avoid colliding in ParserRegistry's MIME index with any future
+            # generic HTML parser. Discover by name.
+            supported_mime_types=(),
+            supported_extensions=(),
+            capabilities=(SourceCapability.PARSE,),
+        )
+
+    @property
+    def supported_mime_types(self) -> tuple[str, ...]:
+        return ()
+
+    def parse(self, payload: str | bytes) -> DocketInfo:
+        if isinstance(payload, bytes):
+            payload = payload.decode("utf-8", errors="replace")
+        return parse_docket(payload)

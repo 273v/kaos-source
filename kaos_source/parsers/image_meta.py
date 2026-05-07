@@ -263,3 +263,43 @@ def extract_image_metadata(path: str | Path) -> ImageMetadata:
         exif_tags={k: v for k, v in exif_tags.items() if v is not None},
         **{k: v for k, v in mapped.items() if v is not None},
     )
+
+
+# ---------------------------------------------------------------------------
+# SourceParser conformance (Track 1 chunk 6)
+# ---------------------------------------------------------------------------
+
+from kaos_source.base.capabilities import SourceCapability  # noqa: E402
+from kaos_source.base.metadata import ParserMetadata  # noqa: E402
+from kaos_source.base.parser import SourceParser  # noqa: E402
+
+
+class ImageMetadataParser(SourceParser):
+    """:class:`SourceParser` wrapper for :func:`extract_image_metadata`.
+
+    EXIF + GPS extraction from JPEG/TIFF/PNG/WebP via Pillow. Includes
+    camera make/model, datetime, GPS coordinates, software fingerprint,
+    exposure settings.
+    """
+
+    @classmethod
+    def metadata(cls) -> ParserMetadata:
+        return ParserMetadata(
+            name="image_metadata",
+            description="EXIF + GPS extraction from JPEG/TIFF/PNG/WebP (Pillow).",
+            supported_mime_types=(
+                "image/jpeg",
+                "image/tiff",
+                "image/png",
+                "image/webp",
+            ),
+            supported_extensions=(".jpg", ".jpeg", ".tif", ".tiff", ".png", ".webp"),
+            capabilities=(SourceCapability.PARSE,),
+        )
+
+    @property
+    def supported_mime_types(self) -> tuple[str, ...]:
+        return ("image/jpeg", "image/tiff", "image/png", "image/webp")
+
+    def parse(self, path: str | Path) -> ImageMetadata:
+        return extract_image_metadata(path)

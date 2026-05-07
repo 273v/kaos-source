@@ -610,9 +610,49 @@ __all__ = [
     "VCardName",
     "VCardOrganization",
     "VCardParseStatus",
+    "VCardParser",
     "VCardProperty",
     "VCardSocialProfile",
     "VCardTelephone",
     "VCardVersion",
     "parse_vcard",
 ]
+
+
+# ---------------------------------------------------------------------------
+# SourceParser conformance (Track 1 chunk 6)
+# ---------------------------------------------------------------------------
+
+from kaos_source.base.capabilities import SourceCapability  # noqa: E402
+from kaos_source.base.metadata import ParserMetadata  # noqa: E402
+from kaos_source.base.parser import SourceParser  # noqa: E402
+
+
+class VCardParser(SourceParser):
+    """:class:`SourceParser` wrapper for :func:`parse_vcard`.
+
+    Supports vCard 4.0 (RFC 6350), 3.0 (RFC 2426), and 2.1 with
+    quoted-printable encoding. Decoding is delegated to
+    :func:`parse_vcard`.
+    """
+
+    @classmethod
+    def metadata(cls) -> ParserMetadata:
+        return ParserMetadata(
+            name="vcard",
+            description=(
+                "vCard parser — RFC 6350 (4.0), RFC 2426 (3.0), and 2.1 with quoted-printable."
+            ),
+            supported_mime_types=("text/vcard", "text/x-vcard"),
+            supported_extensions=(".vcf", ".vcard"),
+            capabilities=(SourceCapability.PARSE,),
+        )
+
+    @property
+    def supported_mime_types(self) -> tuple[str, ...]:
+        return ("text/vcard", "text/x-vcard")
+
+    def parse(self, payload: str | bytes) -> tuple[VCardParseStatus, VCardModel | None, list[str]]:
+        if isinstance(payload, bytes):
+            payload = payload.decode("utf-8", errors="replace")
+        return parse_vcard(payload)

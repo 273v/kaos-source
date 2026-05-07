@@ -1,71 +1,17 @@
-"""MBOX email archive parser — pure stdlib, no external deps.
+"""Back-compat shim — moved to :mod:`kaos_source.parsers.email.mbox` in
+Track 1 chunk 6.
 
-Parses ``.mbox`` files using Python's ``mailbox`` module and delegates
-individual message parsing to :mod:`kaos_source.parsers.eml`.
+Existing ``from kaos_source.parsers.mbox import ...`` callers continue
+to resolve via the re-exports below. Prefer the new location for new
+code:
+
+    from kaos_source.parsers.email.mbox import parse_mbox, MboxResult
 """
 
 from __future__ import annotations
 
-import mailbox
-from pathlib import Path
-
-from pydantic import BaseModel, ConfigDict, Field
-
-from kaos_source.parsers.eml import ParsedEmail, parse_eml
-
-_STRICT = ConfigDict(extra="forbid")
-
-
-class MboxResult(BaseModel):
-    """Result of parsing an MBOX file."""
-
-    model_config = _STRICT
-
-    path: str
-    message_count: int = 0
-    messages: list[ParsedEmail] = Field(default_factory=list)
-    errors: list[str] = Field(default_factory=list)
-
-
-def parse_mbox(
-    path: str | Path,
-    *,
-    limit: int | None = None,
-    include_forensics: bool = True,
-) -> MboxResult:
-    """Parse an MBOX file into a list of structured messages.
-
-    Args:
-        path: Path to .mbox file.
-        limit: Max messages to parse (None = all).
-        include_forensics: Include header forensic analysis per message.
-
-    Returns:
-        MboxResult with parsed messages.
-    """
-    p = Path(path)
-    mbox = mailbox.mbox(str(p))
-    messages: list[ParsedEmail] = []
-    errors: list[str] = []
-    count = 0
-
-    try:
-        for i, msg in enumerate(mbox):
-            if limit is not None and i >= limit:
-                break
-            count += 1
-            try:
-                raw = msg.as_bytes()
-                parsed = parse_eml(raw, include_forensics=include_forensics)
-                messages.append(parsed)
-            except Exception as exc:
-                errors.append(f"Message {i}: {exc}")
-    finally:
-        mbox.close()
-
-    return MboxResult(
-        path=str(p),
-        message_count=count,
-        messages=messages,
-        errors=errors,
-    )
+from kaos_source.parsers.email.mbox import (  # noqa: F401
+    MboxParser,
+    MboxResult,
+    parse_mbox,
+)

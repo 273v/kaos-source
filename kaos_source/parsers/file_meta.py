@@ -163,3 +163,39 @@ def extract_file_metadata(
         is_binary=binary,
         magic_bytes=magic_hex,
     )
+
+
+# ---------------------------------------------------------------------------
+# SourceParser conformance (Track 1 chunk 6)
+# ---------------------------------------------------------------------------
+
+from kaos_source.base.capabilities import SourceCapability  # noqa: E402
+from kaos_source.base.metadata import ParserMetadata  # noqa: E402
+from kaos_source.base.parser import SourceParser  # noqa: E402
+
+
+class FileMetadataParser(SourceParser):
+    """:class:`SourceParser` wrapper for :func:`extract_file_metadata`.
+
+    Generic file metadata extractor — size, timestamps, MIME (via
+    :mod:`mimetypes` + magic bytes), MD5/SHA-256/BLAKE2b checksums.
+    Accepts any file; no MIME-type narrowing, so the parser is
+    discovered by name rather than via the MIME secondary index.
+    """
+
+    @classmethod
+    def metadata(cls) -> ParserMetadata:
+        return ParserMetadata(
+            name="file_metadata",
+            description="Generic file metadata: size, timestamps, MIME, MD5/SHA-256/BLAKE2b.",
+            supported_mime_types=(),
+            supported_extensions=(),
+            capabilities=(SourceCapability.PARSE,),
+        )
+
+    @property
+    def supported_mime_types(self) -> tuple[str, ...]:
+        return ()
+
+    def parse(self, path: str | Path) -> FileMetadata:
+        return extract_file_metadata(path)
