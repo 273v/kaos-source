@@ -169,25 +169,49 @@ default_api_registry.register("my_api", MyApiConnector, force=True)
 
 ## Entity & Forensic Parsers
 
-### VCard parser (no deps beyond stdlib + pydantic)
-- 1 MCP tool: `kaos-source-vcard-parse`
-- RFC 6350 (v4.0), RFC 2426 (v3.0), and vCard 2.1 support including quoted-printable encoding
-- Parser: `kaos_source/parsers/vcard.py` — ported from kelvin-legal-intelligence
-- Models in the same file: `VCardModel`, `VCardName`, `VCardAddress`, `VCardEmail`, etc.
+After Track 1 chunks 8c-8e, every parser family lives in its own
+subpackage holding parser code + MCP tools side-by-side (mirroring
+how `apis/<X>/` is organised).
 
-### Email/eDiscovery forensics (stdlib only except Pillow for images)
-- 5 MCP tools in `kaos_source/tools_forensics.py`:
+### VCard parser — `parsers/vcard/`
+- 1 MCP tool: `kaos-source-vcard-parse` in `parsers/vcard/tools.py`
+- Parser + models: `parsers/vcard/parser.py` (RFC 6350 / 2426 / 2.1 with quoted-printable)
+- `register_vcard_tools(runtime)` exported from `parsers.vcard.tools`
+- No deps beyond stdlib + pydantic
+
+### Email cluster — `parsers/email/`
+- 3 MCP tools in `parsers/email/tools.py` registered via `register_email_tools`:
   - `kaos-source-parse-eml` — parse .eml files (stdlib `email.parser`), extracts envelope, body text+HTML, attachments with MD5, threading via Message-ID/In-Reply-To/References, full forensic header analysis (Received chain, SPF/DKIM/DMARC, Return-Path, X-Mailer, X-Originating-IP, transit time)
   - `kaos-source-parse-mbox` — parse .mbox archives (stdlib `mailbox`)
   - `kaos-source-email-forensics` — header-only forensic analysis (subset of parse-eml)
-  - `kaos-source-image-metadata` — EXIF/GPS extraction from JPEG/TIFF/PNG/WebP via Pillow. Includes camera make/model, datetime, GPS coords (decimal + Google Maps link), software fingerprint, exposure settings. Handles EXIF sub-IFD (0x8769) and GPS sub-IFD (0x8825).
-  - `kaos-source-file-metadata` — generic file metadata via stdlib: size, timestamps, MIME via `mimetypes` + magic bytes, MD5/SHA-256/BLAKE2b checksums
-- Parsers live in `kaos_source/parsers/`: `eml.py`, `mbox.py`, `file_meta.py`, `image_meta.py`
+- Parsers: `parsers/email/eml.py` + `parsers/email/mbox.py`
+- `parsers/email/family.py` is a stub for PST/MSG `family_id` correlation (legal-document-readiness Phase 6)
 - Test fixtures in `tests/fixtures/forensics/`: real Enron corpus messages (FERC public record), GOVCERT-LU eml_parser samples (BSD), SpamScope samples (Apache 2.0), Apache Forrest dev MBOX. See `tests/fixtures/forensics/README.md`.
 
-## Core MCP Tools (6)
+### Filesystem + image metadata — `parsers/metadata/`
+- 2 MCP tools in `parsers/metadata/tools.py` registered via `register_metadata_tools`:
+  - `kaos-source-image-metadata` — EXIF/GPS extraction from JPEG/TIFF/PNG/WebP via Pillow. Includes camera make/model, datetime, GPS coords (decimal + Google Maps link), software fingerprint, exposure settings. Handles EXIF sub-IFD (0x8769) and GPS sub-IFD (0x8825).
+  - `kaos-source-file-metadata` — generic file metadata via stdlib: size, timestamps, MIME via `mimetypes` + magic bytes, MD5/SHA-256/BLAKE2b checksums
+- Parsers: `parsers/metadata/file.py` + `parsers/metadata/image.py`
+
+### PACER docket — `parsers/pacer/`
+- 2 MCP tools in `parsers/pacer/tools.py` registered via `register_pacer_tools`:
+  - `kaos-source-pacer-parse`, `kaos-source-pacer-filter-entries`
+- Parser + models: `parsers/pacer/parser.py`
+- Parses saved PACER docket HTML files — no network access, no PACER account
+- Requires `[pacer]` extra (lxml)
+
+### Combined entry point: `register_forensics_tools`
+- Lives in `parsers/__init__.py` as a thin orchestrator that calls
+  `register_email_tools` + `register_metadata_tools` (5 tools total).
+  Preserved for back-compat callers that don't care about the
+  email-vs-metadata cleavage.
+
+## Core MCP Tools (6) — `runtime/tools.py`
 
 All tools follow kaos-core `KaosTool` ABC. Register with `register_source_tools(runtime)`.
+The 6 core tools wrap `SourceService` operations and live with the
+runtime they depend on (moved from package root in Track 1 chunk 8b).
 
 | Tool | Name | Read-Only | Open-World | Purpose |
 |------|------|-----------|------------|---------|

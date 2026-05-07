@@ -53,7 +53,7 @@ _NETWORK_WRITE_ANNOTATIONS = ToolAnnotations(
 
 def _get_service() -> Any:
     """Get or create a shared SourceService singleton (lazy import)."""
-    from kaos_source.service import SourceService
+    from kaos_source.runtime.service import SourceService
 
     return SourceService()
 
