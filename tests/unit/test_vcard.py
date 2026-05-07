@@ -194,7 +194,7 @@ class TestParseVCard:
 
 
 def _get_vcard_tool():
-    from kaos_source.tools_vcard import register_vcard_tools
+    from kaos_source.parsers.vcard.tools import register_vcard_tools
 
     runtime = KaosRuntime()
     count = register_vcard_tools(runtime)

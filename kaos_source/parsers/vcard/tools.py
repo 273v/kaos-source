@@ -103,7 +103,7 @@ class VCardParseTool(KaosTool):
             except Exception as exc:
                 return ToolResult.create_error(f"Failed to read file '{path_str}': {exc}.")
 
-        from kaos_source.parsers.vcard import parse_vcard
+        from kaos_source.parsers.vcard.parser import parse_vcard
 
         try:
             status, vcard, errors = parse_vcard(content)  # type: ignore[arg-type]
