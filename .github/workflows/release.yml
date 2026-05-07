@@ -74,11 +74,39 @@ jobs:
           uv pip install --python /tmp/smoke/bin/python dist/kaos_source-*-py3-none-any.whl
           /tmp/smoke/bin/python -c "
           import kaos_source
-          from kaos_source import KaosRuntime, register_core_tools
-          rt = KaosRuntime()
-          n = register_core_tools(rt)
-          assert n > 0
-          print(f'kaos-source {kaos_source.__version__}: {n} core tools registered')
+          # Public API surface that the wheel must expose.
+          from kaos_source import (
+              ArchiveConnector,
+              FilesystemConnector,
+              HttpConnector,
+              MemoryConnector,
+              SourceConnector,
+              SourceLocator,
+              SourceService,
+              default_api_registry,
+              default_connector_registry,
+              default_parser_registry,
+              register_source_tools,
+          )
+          # Default registries are populated on import — chain-imports
+          # of connectors / apis / parsers must not error from the wheel.
+          assert len(default_connector_registry) >= 5
+          assert len(default_api_registry) >= 5
+          assert len(default_parser_registry) >= 4
+          # KSRC-05: EDGAR UA validation regression on the install path.
+          from kaos_source.settings.edgar import KaosSourceEdgarSettings
+          try:
+              KaosSourceEdgarSettings(user_agent='no-at-sign').require_user_agent()
+              raise AssertionError('KSRC-05 guard did not fire')
+          except ValueError as exc:
+              assert 'missing a contact email' in str(exc), str(exc)
+          print(
+              f'kaos-source {kaos_source.__version__}: '
+              f'{len(default_connector_registry)} connectors, '
+              f'{len(default_api_registry)} apis, '
+              f'{len(default_parser_registry)} parsers, '
+              f'KSRC-05 guard live'
+          )
           "
 
       - name: Upload distribution artifacts
