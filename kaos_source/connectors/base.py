@@ -1,27 +1,40 @@
+"""Connector ABC + back-compat re-exports.
+
+After Track 1 chunk 2 the bulk of this module's old contents lives in
+:mod:`kaos_source.runtime` (free-function helpers) and
+:mod:`kaos_source.base.protocols` (Closable / ReadableBinaryStream).
+What remains here is:
+
+- :class:`SourceConnector` ABC — the contract the 5 transport
+  connectors implement. Materialization helper methods are kept on the
+  class for back-compat (test_hardening.py uses them; the 5 transport
+  connectors call them via ``self``); their bodies delegate to the
+  free functions in :mod:`kaos_source.runtime.materialization` /
+  :mod:`kaos_source.runtime.preview_decode`.
+- Re-exports of the moved utilities (``now_iso`` / ``timestamp_to_iso``,
+  ``guess_mime_type``, ``encode_cursor`` / ``decode_cursor``,
+  ``path_matches_patterns``, ``assert_roots_allow_path`` /
+  ``assert_roots_allow_uri``, ``ensure_*``, ``Closable``,
+  ``ReadableBinaryStream``) so any existing
+  ``from kaos_source.connectors.base import X`` continues to resolve.
+
+Chunk 7 closeout will move :class:`SourceConnector` into
+:mod:`kaos_source.base.connector` (slim) once the test suite migrates
+off the back-compat surface; for now keeping the class here preserves
+the public API exactly.
+"""
+
 from __future__ import annotations
 
-import asyncio
-import base64
-import mimetypes
-import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from datetime import UTC, datetime
-from fnmatch import fnmatch
-from pathlib import Path, PurePosixPath
-from typing import Protocol, Self
-from urllib.parse import unquote, urlparse, urlsplit
-from uuid import uuid4
+from pathlib import Path
+from typing import TYPE_CHECKING
 
-from kaos_core import ArtifactRetentionPolicy, KaosContext
-from kaos_core.protocol.roots import Root
+from kaos_core import KaosContext
 
-from kaos_source.errors import (
-    SourceMaterializationError,
-    SourceNotFoundError,
-    SourcePolicyError,
-    SourceValidationError,
-)
+from kaos_source.base.protocols import Closable, ReadableBinaryStream
+from kaos_source.errors import SourceValidationError
 from kaos_source.models import (
     SourceDescriptor,
     SourceKind,
@@ -36,134 +49,56 @@ from kaos_source.options import (
     SourceMaterializeOptions,
     SourcePreviewOptions,
 )
+from kaos_source.runtime.cursor import decode_cursor, encode_cursor
+from kaos_source.runtime.materialization import (
+    default_target_path,
+    materialize_bytes,
+    materialize_local_path,
+    materialize_stream,
+)
+from kaos_source.runtime.mime import guess_mime_type
+from kaos_source.runtime.policy import (
+    assert_roots_allow_path,
+    assert_roots_allow_uri,
+    ensure_directory,
+    ensure_file_exists,
+    ensure_regular_file,
+    path_matches_patterns,
+)
+from kaos_source.runtime.preview_decode import decode_preview_payload
+from kaos_source.runtime.time import now_iso, timestamp_to_iso
+
+if TYPE_CHECKING:
+    pass
 
 
-class Closable(Protocol):
-    def close(self) -> None: ...
-
-
-class ReadableBinaryStream(Protocol):
-    def read(self, size: int = -1) -> bytes: ...
-    def close(self) -> None: ...
-    def __enter__(self) -> Self: ...
-    def __exit__(self, exc_type: object, exc: object, tb: object) -> None: ...
-
-
-def now_iso() -> str:
-    return datetime.now(tz=UTC).isoformat()
-
-
-def timestamp_to_iso(timestamp: float | None) -> str | None:
-    if timestamp is None:
-        return None
-    return datetime.fromtimestamp(timestamp, tz=UTC).isoformat()
-
-
-def guess_mime_type(name: str, fallback: str | None = None) -> str | None:
-    mime_type, _ = mimetypes.guess_type(name)
-    return mime_type or fallback
-
-
-def encode_cursor(offset: int) -> str:
-    raw = f"offset:{offset}".encode()
-    return base64.urlsafe_b64encode(raw).decode("ascii")
-
-
-def decode_cursor(cursor: str | None) -> int:
-    if cursor is None:
-        return 0
-    try:
-        decoded = base64.urlsafe_b64decode(cursor.encode("ascii")).decode("utf-8")
-        prefix, value = decoded.split(":", 1)
-    except Exception as exc:
-        raise SourceValidationError("Invalid discovery cursor", cursor=cursor) from exc
-    if prefix != "offset" or not value.isdigit():
-        raise SourceValidationError("Invalid discovery cursor", cursor=cursor)
-    return int(value)
-
-
-def path_matches_patterns(path: str, patterns: list[str]) -> bool:
-    if not patterns:
-        return True
-    return any(
-        fnmatch(path, pattern) or fnmatch(PurePosixPath(path).name, pattern) for pattern in patterns
-    )
-
-
-def _root_path(root: Root) -> Path | None:
-    parsed = urlparse(root.uri)
-    if parsed.scheme != "file":
-        return None
-    return Path(unquote(parsed.path or "/")).resolve()
-
-
-def assert_roots_allow_path(path: Path, roots: list[Root] | None) -> None:
-    if not roots:
-        return
-    resolved_path = path.resolve()
-    root_paths = [root_path for root in roots if (root_path := _root_path(root)) is not None]
-    if not root_paths:
-        raise SourcePolicyError("Source access denied by roots policy", path=str(resolved_path))
-    for root_path in root_paths:
-        try:
-            resolved_path.relative_to(root_path)
-        except ValueError:
-            continue
-        return
-    raise SourcePolicyError("Source access denied by roots policy", path=str(resolved_path))
-
-
-def assert_roots_allow_uri(uri: str, roots: list[Root] | None, *, schemes: set[str]) -> None:
-    if not roots:
-        return
-
-    parsed_uri = urlsplit(uri)
-    relevant_roots = [root for root in roots if urlsplit(root.uri).scheme.lower() in schemes]
-    if not relevant_roots:
-        return
-
-    request_scheme = parsed_uri.scheme.lower()
-    request_netloc = parsed_uri.netloc.lower()
-    request_path = PurePosixPath(parsed_uri.path or "/").as_posix()
-
-    for root in relevant_roots:
-        parsed_root = urlsplit(root.uri)
-        root_scheme = parsed_root.scheme.lower()
-        root_netloc = parsed_root.netloc.lower()
-        root_path = PurePosixPath(parsed_root.path or "/").as_posix()
-        if request_scheme != root_scheme or request_netloc != root_netloc:
-            continue
-        normalized_root = root_path.rstrip("/") or "/"
-        if normalized_root == "/":
-            return
-        if request_path == normalized_root or request_path.startswith(f"{normalized_root}/"):
-            return
-
-    raise SourcePolicyError("Source access denied by roots policy", uri=uri)
-
-
-def ensure_file_exists(path: Path) -> Path:
-    resolved = path.resolve()
-    if not resolved.exists():
-        raise SourceNotFoundError("Source path does not exist", path=str(resolved))
-    return resolved
-
-
-def ensure_directory(path: Path) -> Path:
-    resolved = ensure_file_exists(path)
-    if not resolved.is_dir():
-        raise SourceValidationError("Source path is not a directory", path=str(resolved))
-    return resolved
-
-
-def ensure_regular_file(path: Path) -> Path:
-    resolved = ensure_file_exists(path)
-    if not resolved.is_file():
-        raise SourceValidationError("Source path is not a file", path=str(resolved))
-    return resolved
+__all__ = [
+    "Closable",
+    "ReadableBinaryStream",
+    "SourceConnector",
+    "assert_roots_allow_path",
+    "assert_roots_allow_uri",
+    "decode_cursor",
+    "encode_cursor",
+    "ensure_directory",
+    "ensure_file_exists",
+    "ensure_regular_file",
+    "guess_mime_type",
+    "now_iso",
+    "path_matches_patterns",
+    "timestamp_to_iso",
+]
 
 
 class SourceConnector(ABC):
+    """ABC every transport :class:`SourceConnector` (filesystem / archive /
+    http / browser / memory) implements.
+
+    Required overrides: :meth:`describe`, :meth:`discover`,
+    :meth:`preview`, :meth:`materialize`. Subclasses set the class-level
+    :attr:`kind` and :attr:`name` attributes for routing and provenance.
+    """
+
     kind: SourceKind
     name: str
 
@@ -239,51 +174,12 @@ class SourceConnector(ABC):
         descriptor: SourceDescriptor,
         options: SourceMaterializeOptions,
     ) -> SourceMaterialization:
-        self._require_runtime(context)
-        assert context.runtime is not None
-
-        target_path = options.target_path or self._default_target_path(descriptor.name, self.kind)
-        target_relative_path = context.vfs.normalize_path(target_path)
-        target_disk_path = context.vfs.resolve_disk_path(
-            target_relative_path, context_id=context.session_id
-        )
-
-        try:
-            if target_disk_path is not None:
-                await asyncio.to_thread(self._copy_path_to_disk, source_path, target_disk_path)
-            else:
-                payload = await asyncio.to_thread(source_path.read_bytes)
-                await context.vfs.write(
-                    target_relative_path, payload, context_id=context.session_id
-                )
-        except OSError as exc:
-            raise SourceMaterializationError(
-                "Failed to stage source into VFS",
-                source_path=str(source_path),
-                target_path=target_relative_path,
-            ) from exc
-
-        manifest = await context.runtime.artifacts.create_from_path(
-            target_relative_path,
-            context_id=context.session_id,
-            session_id=context.session_id,
-            workflow_id=options.workflow_id,
-            name=options.artifact_name or descriptor.name,
-            description=options.artifact_description,
-            mime_type=descriptor.mime_type,
-            role=options.role,
-            provenance=descriptor.provenance.model_dump(mode="json"),
-            retention_policy=options.retention_policy,
-            metadata=options.metadata,
-            checksum=options.checksum,
-            ttl_seconds=options.ttl_seconds,
-        )
-        return SourceMaterialization(
+        return await materialize_local_path(
+            connector_kind=self.kind,
+            source_path=source_path,
+            context=context,
             descriptor=descriptor,
-            manifest=manifest,
-            artifact_ref=manifest.to_ref(),
-            bytes_written=manifest.size,
-            retention_policy=ArtifactRetentionPolicy(manifest.retention_policy),
+            options=options,
         )
 
     async def _materialize_stream(
@@ -294,54 +190,12 @@ class SourceConnector(ABC):
         descriptor: SourceDescriptor,
         options: SourceMaterializeOptions,
     ) -> SourceMaterialization:
-        self._require_runtime(context)
-        assert context.runtime is not None
-
-        target_path = options.target_path or self._default_target_path(descriptor.name, self.kind)
-        target_relative_path = context.vfs.normalize_path(target_path)
-        target_disk_path = context.vfs.resolve_disk_path(
-            target_relative_path, context_id=context.session_id
-        )
-        if target_disk_path is None:
-            try:
-                payload = await asyncio.to_thread(self._read_stream_bytes, stream_factory)
-            except OSError as exc:
-                raise SourceMaterializationError(
-                    "Failed to read source stream for materialization",
-                    locator=descriptor.locator.uri,
-                ) from exc
-            await context.vfs.write(target_relative_path, payload, context_id=context.session_id)
-        else:
-            try:
-                await asyncio.to_thread(self._copy_stream_to_disk, stream_factory, target_disk_path)
-            except OSError as exc:
-                raise SourceMaterializationError(
-                    "Failed to copy source stream into VFS",
-                    locator=descriptor.locator.uri,
-                    target_path=target_relative_path,
-                ) from exc
-
-        manifest = await context.runtime.artifacts.create_from_path(
-            target_relative_path,
-            context_id=context.session_id,
-            session_id=context.session_id,
-            workflow_id=options.workflow_id,
-            name=options.artifact_name or descriptor.name,
-            description=options.artifact_description,
-            mime_type=descriptor.mime_type,
-            role=options.role,
-            provenance=descriptor.provenance.model_dump(mode="json"),
-            retention_policy=options.retention_policy,
-            metadata=options.metadata,
-            checksum=options.checksum,
-            ttl_seconds=options.ttl_seconds,
-        )
-        return SourceMaterialization(
+        return await materialize_stream(
+            connector_kind=self.kind,
+            stream_factory=stream_factory,
+            context=context,
             descriptor=descriptor,
-            manifest=manifest,
-            artifact_ref=manifest.to_ref(),
-            bytes_written=manifest.size,
-            retention_policy=ArtifactRetentionPolicy(manifest.retention_policy),
+            options=options,
         )
 
     async def _materialize_bytes(
@@ -358,62 +212,23 @@ class SourceConnector(ABC):
         metadata: dict[str, object] | None = None,
         provenance: dict[str, object] | None = None,
     ) -> SourceMaterialization:
-        self._require_runtime(context)
-        assert context.runtime is not None
-
-        resolved_target_path = target_path or self._default_target_path(descriptor.name, self.kind)
-        target_relative_path = context.vfs.normalize_path(resolved_target_path)
-        await context.vfs.write(target_relative_path, payload, context_id=context.session_id)
-
-        manifest = await context.runtime.artifacts.create_from_path(
-            target_relative_path,
-            context_id=context.session_id,
-            session_id=context.session_id,
-            workflow_id=options.workflow_id,
-            name=artifact_name or options.artifact_name or descriptor.name,
-            description=artifact_description or options.artifact_description,
-            mime_type=mime_type or descriptor.mime_type,
-            role=options.role,
-            provenance=provenance or descriptor.provenance.model_dump(mode="json"),
-            retention_policy=options.retention_policy,
-            metadata=options.metadata if metadata is None else metadata,
-            checksum=options.checksum,
-            ttl_seconds=options.ttl_seconds,
-        )
-        return SourceMaterialization(
+        return await materialize_bytes(
+            connector_kind=self.kind,
+            payload=payload,
+            context=context,
             descriptor=descriptor,
-            manifest=manifest,
-            artifact_ref=manifest.to_ref(),
-            bytes_written=manifest.size,
-            retention_policy=ArtifactRetentionPolicy(manifest.retention_policy),
+            options=options,
+            artifact_name=artifact_name,
+            artifact_description=artifact_description,
+            target_path=target_path,
+            mime_type=mime_type,
+            metadata=metadata,
+            provenance=provenance,
         )
-
-    @staticmethod
-    def _copy_path_to_disk(source_path: Path, target_path: Path) -> None:
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source_path, target_path)
-
-    @staticmethod
-    def _copy_stream_to_disk(
-        stream_factory: Callable[[], ReadableBinaryStream],
-        target_path: Path,
-    ) -> None:
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        with stream_factory() as source, target_path.open("wb") as target:
-            shutil.copyfileobj(source, target)
-
-    @staticmethod
-    def _read_stream_bytes(stream_factory: Callable[[], ReadableBinaryStream]) -> bytes:
-        with stream_factory() as source:
-            return source.read()
 
     @staticmethod
     def _default_target_path(name: str, kind: SourceKind) -> str:
-        safe_name = "".join(
-            char if char.isalnum() or char in {"-", "_", "."} else "-" for char in name
-        )
-        safe_name = safe_name.strip("-") or "artifact"
-        return f"sources/{kind.value}/{uuid4()}-{safe_name}"
+        return default_target_path(name, kind)
 
     @staticmethod
     def _decode_preview_payload(
@@ -425,32 +240,11 @@ class SourceConnector(ABC):
         encoding: str,
         truncated_override: bool | None = None,
     ) -> SourcePreview:
-        truncated = (
-            truncated_override
-            if truncated_override is not None
-            else (size is not None and size > len(payload))
-        )
-        is_text = False
-        if mime_type is not None:
-            is_text = mime_type.startswith("text/") or mime_type in {
-                "application/json",
-                "application/xml",
-                "application/yaml",
-            }
-        if not is_text and b"\x00" not in payload:
-            is_text = True
-        if is_text:
-            return SourcePreview(
-                source_id=source_id,
-                text_preview=payload.decode(encoding, errors="replace"),
-                truncated=truncated,
-                size=size,
-                mime_type=mime_type,
-            )
-        return SourcePreview.from_binary(
+        return decode_preview_payload(
+            payload,
             source_id=source_id,
-            payload=payload,
-            truncated=truncated,
             size=size,
             mime_type=mime_type,
+            encoding=encoding,
+            truncated_override=truncated_override,
         )
