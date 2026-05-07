@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 from kaos_core import KaosRuntime
 
-from kaos_source.tools_pacer import (
+from kaos_source.parsers.pacer.tools import (
     PacerFilterEntriesTool,
     PacerParseDocketTool,
     register_pacer_tools,
@@ -82,7 +82,7 @@ class TestParser:
         types = {e.entry_type for e in docket.docket_entries if e.entry_type}
         assert len(types) > 0
 
-    @patch("kaos_source.parsers.pacer.logger.warning")
+    @patch("kaos_source.parsers.pacer.parser.logger.warning")
     def test_malformed_row_emits_warning_instead_of_silent_drop(self, mock_warn) -> None:
         from kaos_source.parsers.pacer import parse_docket
 

@@ -33,7 +33,7 @@ from kaos_source.parsers.email.eml import EmlParser
 from kaos_source.parsers.email.mbox import MboxParser
 from kaos_source.parsers.file_meta import FileMetadataParser
 from kaos_source.parsers.image_meta import ImageMetadataParser
-from kaos_source.parsers.pacer import PacerParser
+from kaos_source.parsers.pacer.parser import PacerParser
 from kaos_source.parsers.vcard.parser import VCardParser
 from kaos_source.registry.parser_registry import default_parser_registry
 

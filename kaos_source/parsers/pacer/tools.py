@@ -74,7 +74,7 @@ class PacerParseDocketTool(KaosTool):
         except Exception as exc:
             return ToolResult.create_error(f"Failed to read file '{path_str}': {exc}.")
 
-        from kaos_source.parsers.pacer import parse_docket
+        from kaos_source.parsers.pacer.parser import parse_docket
 
         try:
             docket = parse_docket(html_content)
@@ -177,7 +177,7 @@ class PacerFilterEntriesTool(KaosTool):
         except Exception as exc:
             return ToolResult.create_error(f"Failed to read file: {exc}.")
 
-        from kaos_source.parsers.pacer import parse_docket
+        from kaos_source.parsers.pacer.parser import parse_docket
 
         try:
             docket = parse_docket(html_content)

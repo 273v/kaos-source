@@ -460,7 +460,7 @@ class TestPacerBattle:
 
     async def test_parse_full_docket(self) -> None:
         """Agent: 'Parse this PACER docket file and summarize the case'"""
-        from kaos_source.tools_pacer import PacerParseDocketTool
+        from kaos_source.parsers.pacer.tools import PacerParseDocketTool
 
         tool = PacerParseDocketTool()
         result = await tool.execute({"path": self._FIXTURE})
@@ -477,7 +477,7 @@ class TestPacerBattle:
 
     async def test_find_motions(self) -> None:
         """Agent: 'Find all motions in this docket'"""
-        from kaos_source.tools_pacer import PacerFilterEntriesTool
+        from kaos_source.parsers.pacer.tools import PacerFilterEntriesTool
 
         tool = PacerFilterEntriesTool()
         result = await tool.execute(
@@ -494,7 +494,7 @@ class TestPacerBattle:
 
     async def test_find_entries_with_documents(self) -> None:
         """Agent: 'Show docket entries that have downloadable documents'"""
-        from kaos_source.tools_pacer import PacerFilterEntriesTool
+        from kaos_source.parsers.pacer.tools import PacerFilterEntriesTool
 
         tool = PacerFilterEntriesTool()
         result = await tool.execute(

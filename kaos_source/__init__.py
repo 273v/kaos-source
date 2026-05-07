@@ -92,6 +92,7 @@ from kaos_source.options import (
     SourceMaterializeOptions,
     SourcePreviewOptions,
 )
+from kaos_source.parsers.pacer.tools import register_pacer_tools
 from kaos_source.parsers.vcard.tools import register_vcard_tools
 
 # --- Registries (Track 1 chunk 4) -------------------------------------------
@@ -106,7 +107,6 @@ from kaos_source.registry import (
 from kaos_source.runtime.service import SourceService
 from kaos_source.runtime.tools import register_source_tools
 from kaos_source.tools_forensics import register_forensics_tools
-from kaos_source.tools_pacer import register_pacer_tools
 
 __all__ = [
     "ApiConnector",
