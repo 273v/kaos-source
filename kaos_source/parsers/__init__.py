@@ -7,19 +7,25 @@ all 6 builtin parsers into
 :data:`kaos_source.registry.default_parser_registry` with ``force=True``
 so module re-imports stay idempotent.
 
-Parsers (6 total):
+Track 1 chunks 8c-8e completed the cohesive layout: vcard, pacer, and
+metadata each became their own subpackage holding parser + models +
+MCP tools side-by-side, and the legacy ``kaos_source/tools_forensics.py``
+was dissolved into :mod:`.email.tools` (3 email tools) +
+:mod:`.metadata.tools` (2 metadata tools), bridged here by
+:func:`register_forensics_tools` for back-compat.
 
-- :class:`VCardParser`         — RFC 6350/2426/2.1 vCard
+Parsers (6 total) and the subpackage that owns each:
+
+- :class:`VCardParser`         — :mod:`.vcard.parser`
                                  (``text/vcard`` / ``text/x-vcard``)
-- :class:`EmlParser`           — RFC 5322 / MIME email
-                                 (``message/rfc822``)
-- :class:`MboxParser`          — Berkeley mbox archive
-                                 (``application/mbox``)
-- :class:`PacerParser`         — PACER docket HTML (no MIME index entry —
+- :class:`EmlParser`           — :mod:`.email.eml` (``message/rfc822``)
+- :class:`MboxParser`          — :mod:`.email.mbox` (``application/mbox``)
+- :class:`PacerParser`         — :mod:`.pacer.parser` (no MIME index —
                                  conflicts with generic HTML; discover by name)
-- :class:`FileMetadataParser`  — generic file metadata (no MIME index entry —
+- :class:`FileMetadataParser`  — :mod:`.metadata.file` (no MIME index —
                                  accepts any file; discover by name)
-- :class:`ImageMetadataParser` — EXIF + GPS from JPEG/TIFF/PNG/WebP
+- :class:`ImageMetadataParser` — :mod:`.metadata.image`
+                                 (image/jpeg, tiff, png, webp)
 
 Out-of-tree custom parsers register explicitly::
 
@@ -29,13 +35,20 @@ Out-of-tree custom parsers register explicitly::
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from kaos_source.parsers.email.eml import EmlParser
 from kaos_source.parsers.email.mbox import MboxParser
-from kaos_source.parsers.file_meta import FileMetadataParser
-from kaos_source.parsers.image_meta import ImageMetadataParser
+from kaos_source.parsers.email.tools import register_email_tools
+from kaos_source.parsers.metadata.file import FileMetadataParser
+from kaos_source.parsers.metadata.image import ImageMetadataParser
+from kaos_source.parsers.metadata.tools import register_metadata_tools
 from kaos_source.parsers.pacer.parser import PacerParser
 from kaos_source.parsers.vcard.parser import VCardParser
 from kaos_source.registry.parser_registry import default_parser_registry
+
+if TYPE_CHECKING:
+    from kaos_core import KaosRuntime
 
 # Auto-register the 6 built-in parsers. ``force=True`` makes module
 # re-imports idempotent (e.g. during pytest collection across multiple
@@ -48,6 +61,29 @@ default_parser_registry.register("file_metadata", FileMetadataParser, force=True
 default_parser_registry.register("image_metadata", ImageMetadataParser, force=True)
 
 
+def register_forensics_tools(runtime: KaosRuntime) -> int:
+    """Register the e-discovery / forensics MCP tool bundle.
+
+    Convenience orchestrator that fans out to the per-parser-family
+    register functions:
+
+    - :func:`kaos_source.parsers.email.tools.register_email_tools` —
+      ``kaos-source-parse-eml`` + ``kaos-source-parse-mbox`` +
+      ``kaos-source-email-forensics`` (3 tools)
+    - :func:`kaos_source.parsers.metadata.tools.register_metadata_tools` —
+      ``kaos-source-image-metadata`` + ``kaos-source-file-metadata``
+      (2 tools)
+
+    Track 1 chunk 8e split the legacy ``tools_forensics.py`` into the
+    above per-family files; this orchestrator preserves the original
+    "register all 5 forensic tools" surface for callers that don't
+    care about the email-vs-metadata cleavage.
+    """
+    count = register_email_tools(runtime)
+    count += register_metadata_tools(runtime)
+    return count
+
+
 __all__ = [
     "EmlParser",
     "FileMetadataParser",
@@ -55,4 +91,7 @@ __all__ = [
     "MboxParser",
     "PacerParser",
     "VCardParser",
+    "register_email_tools",
+    "register_forensics_tools",
+    "register_metadata_tools",
 ]

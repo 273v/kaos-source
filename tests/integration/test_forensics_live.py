@@ -139,7 +139,7 @@ def sample_pdf_file(tmp_path: Path) -> Path:
 
 
 def _build_forensic_tools() -> dict:
-    from kaos_source.tools_forensics import register_forensics_tools
+    from kaos_source.parsers import register_forensics_tools
 
     runtime = KaosRuntime()
     count = register_forensics_tools(runtime)

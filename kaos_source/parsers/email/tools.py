@@ -1,11 +1,15 @@
-"""MCP tools for eDiscovery and forensic analysis.
+"""MCP tools for the email parser cluster (eml, mbox, header forensics).
 
-5 tools for email, image, and file metadata extraction:
-- kaos-source-parse-eml — Parse EML/MIME email files
-- kaos-source-parse-mbox — Parse MBOX email archives
-- kaos-source-email-forensics — Forensic email header analysis
-- kaos-source-image-metadata — Image EXIF/GPS extraction
-- kaos-source-file-metadata — Generic file checksums and metadata
+Track 1 chunk 8e split these out of the legacy
+``kaos_source/tools_forensics.py`` into the email parser family. The
+sibling 2 metadata tools (image-metadata, file-metadata) live in
+:mod:`kaos_source.parsers.metadata.tools`.
+
+Tools (3):
+
+- ``kaos-source-parse-eml``         — :class:`ParseEmlTool`
+- ``kaos-source-parse-mbox``        — :class:`ParseMboxTool`
+- ``kaos-source-email-forensics``   — :class:`EmailForensicsTool`
 """
 
 from __future__ import annotations
@@ -29,7 +33,7 @@ _FORENSIC_ANNOTATIONS = ToolAnnotations(
 )
 
 
-# ── 1. kaos-source-parse-eml ───────────────────────────────────────
+# ── kaos-source-parse-eml ──────────────────────────────────────────
 
 
 class ParseEmlTool(KaosTool):
@@ -77,7 +81,7 @@ class ParseEmlTool(KaosTool):
         if not path.is_file():
             return ToolResult.create_error(f"Not a file: {path_str}")
 
-        from kaos_source.parsers.eml import parse_eml_file
+        from kaos_source.parsers.email.eml import parse_eml_file
 
         try:
             result = parse_eml_file(path)
@@ -98,7 +102,7 @@ class ParseEmlTool(KaosTool):
         return ToolResult.create_success(output, summary=" | ".join(parts))
 
 
-# ── 2. kaos-source-parse-mbox ──────────────────────────────────────
+# ── kaos-source-parse-mbox ─────────────────────────────────────────
 
 
 class ParseMboxTool(KaosTool):
@@ -146,7 +150,7 @@ class ParseMboxTool(KaosTool):
 
         limit = inputs.get("limit")
 
-        from kaos_source.parsers.mbox import parse_mbox
+        from kaos_source.parsers.email.mbox import parse_mbox
 
         try:
             result = parse_mbox(path, limit=limit)
@@ -161,7 +165,7 @@ class ParseMboxTool(KaosTool):
         return ToolResult.create_success(output, summary=summary)
 
 
-# ── 3. kaos-source-email-forensics ─────────────────────────────────
+# ── kaos-source-email-forensics ────────────────────────────────────
 
 
 class EmailForensicsTool(KaosTool):
@@ -211,7 +215,7 @@ class EmailForensicsTool(KaosTool):
         if not path_str and not headers_str:
             return ToolResult.create_error("Provide either 'path' or 'headers'.")
 
-        from kaos_source.parsers.eml import parse_eml, parse_eml_file
+        from kaos_source.parsers.email.eml import parse_eml, parse_eml_file
 
         try:
             if path_str:
@@ -219,7 +223,7 @@ class EmailForensicsTool(KaosTool):
                 if not path.exists():
                     return ToolResult.create_error(f"File not found: {path_str}")
                 result = parse_eml_file(path)
-            elif isinstance(headers_str, (str, bytes)):
+            elif isinstance(headers_str, str | bytes):
                 result = parse_eml(headers_str, include_forensics=True)
             else:
                 return ToolResult.create_error("'headers' must be a string.")
@@ -243,151 +247,15 @@ class EmailForensicsTool(KaosTool):
         return ToolResult.create_success(output, summary=" | ".join(parts))
 
 
-# ── 4. kaos-source-image-metadata ──────────────────────────────────
-
-
-class ImageMetadataTool(KaosTool):
-    """Extract EXIF/GPS metadata from an image."""
-
-    @property
-    def metadata(self) -> ToolMetadata:
-        return ToolMetadata(
-            name="kaos-source-image-metadata",
-            display_name="Image EXIF Metadata",
-            description=(
-                "Extract EXIF metadata from JPEG, TIFF, PNG, or WebP images. "
-                "Returns: camera make/model, date taken, GPS coordinates (with "
-                "Google Maps link), software, author, copyright, exposure settings, "
-                "orientation, and all other EXIF tags. "
-                "Requires Pillow (pip install Pillow). "
-                "For generic file metadata, use kaos-source-file-metadata."
-            ),
-            category=ToolCategory.DOCUMENT,
-            capability=ToolCapability.EXTRACT,
-            module_name=_MODULE,
-            version=_VERSION,
-            annotations=_FORENSIC_ANNOTATIONS,
-            input_schema=[
-                ParameterSchema(name="path", type="string", description="Path to image file."),
-            ],
-        )
-
-    async def execute(
-        self, inputs: dict[str, Any], context: KaosContext | None = None
-    ) -> ToolResult:
-        path_str = inputs.get("path", "")
-        if not path_str:
-            return ToolResult.create_error("Parameter 'path' is required.")
-
-        path = Path(path_str).expanduser().resolve()
-        if not path.exists():
-            return ToolResult.create_error(f"File not found: {path_str}")
-
-        from kaos_source.parsers.image_meta import extract_image_metadata
-
-        try:
-            result = extract_image_metadata(path)
-        except Exception as exc:
-            return ToolResult.create_error(
-                f"Failed to extract image metadata: {exc}. "
-                "Verify the file is a valid image (JPEG, PNG, TIFF, WebP)."
-            )
-
-        output = result.model_dump(mode="json", exclude_none=True)
-
-        parts = []
-        if result.format:
-            parts.append(result.format)
-        if result.width and result.height:
-            parts.append(f"{result.width}x{result.height}")
-        if result.camera_model:
-            parts.append(result.camera_model)
-        if result.datetime_original:
-            parts.append(result.datetime_original[:10])
-        if result.gps:
-            parts.append(f"GPS: {result.gps.latitude:.4f},{result.gps.longitude:.4f}")
-
-        return ToolResult.create_success(
-            output, summary=" | ".join(parts) if parts else f"Image: {path.name}"
-        )
-
-
-# ── 5. kaos-source-file-metadata ───────────────────────────────────
-
-
-class FileMetadataTool(KaosTool):
-    """Extract file-level metadata and checksums."""
-
-    @property
-    def metadata(self) -> ToolMetadata:
-        return ToolMetadata(
-            name="kaos-source-file-metadata",
-            display_name="File Metadata",
-            description=(
-                "Extract filesystem metadata for any file: size, timestamps "
-                "(created, modified, accessed), MIME type, file type detection "
-                "via magic bytes, and cryptographic checksums (MD5, SHA-256). "
-                "Useful for chain of custody, deduplication, and integrity "
-                "verification in eDiscovery. No external dependencies. "
-                "For image-specific EXIF data, use kaos-source-image-metadata."
-            ),
-            category=ToolCategory.DOCUMENT,
-            capability=ToolCapability.EXTRACT,
-            module_name=_MODULE,
-            version=_VERSION,
-            annotations=_FORENSIC_ANNOTATIONS,
-            input_schema=[
-                ParameterSchema(name="path", type="string", description="Path to any file."),
-            ],
-        )
-
-    async def execute(
-        self, inputs: dict[str, Any], context: KaosContext | None = None
-    ) -> ToolResult:
-        path_str = inputs.get("path", "")
-        if not path_str:
-            return ToolResult.create_error("Parameter 'path' is required.")
-
-        path = Path(path_str).expanduser().resolve()
-        if not path.exists():
-            return ToolResult.create_error(f"File not found: {path_str}")
-        if not path.is_file():
-            return ToolResult.create_error(f"Not a file: {path_str}")
-
-        from kaos_source.parsers.file_meta import extract_file_metadata
-
-        try:
-            result = extract_file_metadata(path)
-        except Exception as exc:
-            return ToolResult.create_error(f"Failed to extract file metadata: {exc}")
-
-        output = result.model_dump(mode="json", exclude_none=True)
-
-        parts = [result.name]
-        if result.mime_type:
-            parts.append(result.mime_type)
-        if result.size_bytes is not None:
-            if result.size_bytes < 1024:
-                parts.append(f"{result.size_bytes} B")
-            elif result.size_bytes < 1024 * 1024:
-                parts.append(f"{result.size_bytes / 1024:.1f} KB")
-            else:
-                parts.append(f"{result.size_bytes / (1024 * 1024):.1f} MB")
-
-        return ToolResult.create_success(output, summary=" | ".join(parts))
-
-
 # ── Registration ────────────────────────────────────────────────────
 
 
-def register_forensics_tools(runtime: KaosRuntime) -> int:
-    """Register all forensic/eDiscovery tools with the runtime. Returns count."""
+def register_email_tools(runtime: KaosRuntime) -> int:
+    """Register the 3 email-family MCP tools. Returns count."""
     tools: list[KaosTool] = [
         ParseEmlTool(),
         ParseMboxTool(),
         EmailForensicsTool(),
-        ImageMetadataTool(),
-        FileMetadataTool(),
     ]
     for tool in tools:
         runtime.tools.register_tool(tool)
