@@ -56,7 +56,11 @@ jobs:
           uv run ruff format --check kaos_source tests
           uv run ruff check kaos_source tests
           uv run ty check kaos_source tests
-          uv run pytest -m "not live and not network and not slow" --no-cov
+          # Marker filter must mirror ci.yml exactly (F011). Integration
+          # tests in tests/integration/ start subprocess MCP servers and
+          # hit live APIs — neither runs cleanly in the release-job
+          # environment.
+          uv run pytest -m "not live and not network and not slow and not integration" --no-cov
 
       - name: Build wheel + sdist
         run: uv build
