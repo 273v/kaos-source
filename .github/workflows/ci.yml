@@ -200,24 +200,44 @@ jobs:
           /tmp/smoke/bin/python -c "
           import kaos_source
           assert kaos_source.__version__, 'version missing from wheel'
-          # All 100+ public symbols import without error.
+          # Public API surface that the wheel must expose.
           from kaos_source import (
-              ArtifactManifest,
-              KaosContext,
-              KaosRuntime,
-              KaosTool,
-              ModuleSettings,
-              SchemaExporter,
-              ToolResult,
-              VirtualFileSystem,
-              kaos_tool,
-              register_core_tools,
+              ArchiveConnector,
+              FilesystemConnector,
+              HttpConnector,
+              MemoryConnector,
+              SourceConnector,
+              SourceDescriptor,
+              SourceDiscoverOptions,
+              SourceLocator,
+              SourceService,
+              register_source_tools,
           )
-          # Runtime container resolves and core tools register.
-          rt = KaosRuntime()
-          n = register_core_tools(rt)
-          assert n > 0, 'no core tools registered'
-          print(f'kaos-source {kaos_source.__version__}: {n} core tools registered')
+          # Default registries are populated on import — chain-imports of
+          # connectors / apis / parsers must not error from the wheel.
+          from kaos_source import (
+              default_api_registry,
+              default_connector_registry,
+              default_parser_registry,
+          )
+          assert len(default_connector_registry) >= 5, default_connector_registry
+          assert len(default_api_registry) >= 5, default_api_registry
+          assert len(default_parser_registry) >= 4, default_parser_registry
+          # KSRC-05 fires through the wheel install too (regression for
+          # the EDGAR User-Agent validation released in this version).
+          from kaos_source.settings.edgar import KaosSourceEdgarSettings
+          try:
+              KaosSourceEdgarSettings(user_agent='no-at-sign').require_user_agent()
+              raise AssertionError('KSRC-05 guard did not fire')
+          except ValueError as exc:
+              assert 'missing a contact email' in str(exc), str(exc)
+          print(
+              f'kaos-source {kaos_source.__version__}: '
+              f'{len(default_connector_registry)} connectors, '
+              f'{len(default_api_registry)} apis, '
+              f'{len(default_parser_registry)} parsers, '
+              f'KSRC-05 guard live'
+          )
           "
           # Exercise the CLI entrypoint.
           /tmp/smoke/bin/kaos-source --help

@@ -15,10 +15,24 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
+      # Email / forensic fixtures (Enron, GOVCERT-LU, SpamScope, ASF
+      # mbox) carry the original line endings, trailing whitespace, and
+      # missing final newlines from the wire — touching them would
+      # invalidate the parser regression tests. Excluded from the
+      # whitespace-fixing hooks; license + sample-binary files
+      # similarly excluded.
       - id: trailing-whitespace
-        exclude: ^LICENSE$
+        exclude: |
+          (?x)^(
+            LICENSE
+            |tests/fixtures/.*
+          )$
       - id: end-of-file-fixer
-        exclude: ^LICENSE$
+        exclude: |
+          (?x)^(
+            LICENSE
+            |tests/fixtures/.*
+          )$
       - id: check-yaml
       - id: check-toml
       - id: check-merge-conflict
@@ -27,7 +41,9 @@ repos:
         args: [--maxkb=500]
       - id: mixed-line-ending
         args: [--fix=lf]
+        exclude: ^tests/fixtures/.*$
       - id: detect-private-key
+        exclude: ^tests/fixtures/.*$
 
   # ───────────── ruff (format + lint) ─────────────
   # Pinned to match the dev group in pyproject.toml to avoid drift between
