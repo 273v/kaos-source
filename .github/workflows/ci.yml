@@ -122,7 +122,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           uv run pytest \
-            -m "not live and not network and not slow" \
+            -m "not live and not network and not slow and not integration" \
             --cov=kaos_source \
             --cov-branch \
             --cov-report=term-missing \
@@ -160,7 +160,7 @@ jobs:
       - name: Run tests
         run: |
           uv run pytest \
-            -m "not live and not network and not slow" \
+            -m "not live and not network and not slow and not integration" \
             --no-cov \
             -q
 

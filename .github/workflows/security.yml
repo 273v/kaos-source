@@ -58,22 +58,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      # The pip-audit action creates its own subprocess venv that uses
+      # whatever Python is on PATH. Several kaos-source runtime / dev
+      # dependencies (kaos-core / kaos-content / kaos-nlp-core) declare
+      # ``requires-python >=3.13``. Without 3.13 on the runner pip would
+      # report "no matching distribution" on the alpha versions and
+      # fail the audit before scanning. ``setup-python`` puts 3.13 on
+      # PATH for everyone downstream.
+      - name: Set up Python 3.13 (for pip-audit subprocess venv)
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-          cache-dependency-glob: uv.lock
-
-      - name: Install Python 3.13
-        run: uv python install 3.13
+          cache-dependency-glob: pyproject.toml
 
       - name: Sync dependencies
         run: uv sync --group dev --python 3.13
 
       - name: Export installed dependency set to requirements.txt
         # pip-audit reads requirements.txt; uv export gives us the
-        # exact resolved set, locked to versions, including
-        # transitive dependencies.
+        # exact resolved set, including transitive dependencies.
         run: uv export --no-hashes --no-emit-project --format requirements-txt > /tmp/requirements.txt
 
       - name: Run pip-audit
