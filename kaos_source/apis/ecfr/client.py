@@ -28,6 +28,7 @@ from typing import Any
 import httpx
 from kaos_core.logging import get_logger
 
+from kaos_source.apis._http import fetch_json, fetch_text
 from kaos_source.apis.ecfr.models import ECFRAgency, ECFRStructureNode, ECFRTitle
 from kaos_source.settings.ecfr import KaosSourceECFRSettings
 
@@ -96,13 +97,13 @@ async def get_titles(
     """
     s = KaosSourceECFRSettings.resolve(settings)
 
+    url = f"{_BASE_URL}/versioner/v1/titles.json"
     async with httpx.AsyncClient(
         timeout=s.timeout,
         headers=_api_headers(s),
     ) as client:
-        resp = await client.get(f"{_BASE_URL}/versioner/v1/titles.json")
-        resp.raise_for_status()
-        data = resp.json()
+        # KSRC-02 + KSRC-07.
+        data = await fetch_json(client, url, api="eCFR")
 
     return [_parse_title(t) for t in data.get("titles", [])]
 
@@ -151,13 +152,13 @@ async def get_agencies(
     """
     s = KaosSourceECFRSettings.resolve(settings)
 
+    url = f"{_BASE_URL}/admin/v1/agencies.json"
     async with httpx.AsyncClient(
         timeout=s.timeout,
         headers=_api_headers(s),
     ) as client:
-        resp = await client.get(f"{_BASE_URL}/admin/v1/agencies.json")
-        resp.raise_for_status()
-        data = resp.json()
+        # KSRC-02 + KSRC-07.
+        data = await fetch_json(client, url, api="eCFR")
 
     return [_parse_agency(a) for a in data.get("agencies", [])]
 
@@ -180,13 +181,13 @@ async def get_title_structure(
     """
     s = KaosSourceECFRSettings.resolve(settings)
 
+    url = f"{_BASE_URL}/versioner/v1/structure/{date}/title-{title}.json"
     async with httpx.AsyncClient(
         timeout=s.timeout,
         headers=_api_headers(s),
     ) as client:
-        resp = await client.get(f"{_BASE_URL}/versioner/v1/structure/{date}/title-{title}.json")
-        resp.raise_for_status()
-        data = resp.json()
+        # KSRC-02 + KSRC-07.
+        data = await fetch_json(client, url, api="eCFR")
 
     return _parse_structure(data)
 
@@ -231,10 +232,9 @@ async def get_section_content(
         follow_redirects=True,
         headers={"User-Agent": s.user_agent},
     ) as client:
-        resp = await client.get(url, params=params)
-        resp.raise_for_status()
-
-    return resp.text
+        # KSRC-02 + KSRC-07: section content can be hundreds of KB to a
+        # few MB; the kaos-core 100 MB default leaves plenty of headroom.
+        return await fetch_text(client, url, api="eCFR", params=params)
 
 
 __all__ = [

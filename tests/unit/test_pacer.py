@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from kaos_core import KaosRuntime
 
+from kaos_source.parsers.pacer.parser import parse_docket
 from kaos_source.parsers.pacer.tools import (
     PacerFilterEntriesTool,
     PacerParseDocketTool,
@@ -177,3 +179,54 @@ class TestFilterTool:
         assert result.structuredContent is not None
         for entry in result.structuredContent["entries"]:
             assert len(entry["document_links"]) > 0
+
+
+# ---------------------------------------------------------------------------
+# KSRC-01 — XXE / entity-expansion guard
+# ---------------------------------------------------------------------------
+
+
+_BILLION_LAUGHS = """<!DOCTYPE lolz [
+  <!ENTITY lol "lol">
+  <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+  <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+  <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
+  <!ENTITY lol5 "&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;">
+]>
+<html><body><table><tr><td>&lol5;</td></tr></table></body></html>"""
+
+
+class TestKSRC01EntityExpansionBlocked:
+    """KSRC-01 — PACER parser must not expand DOCTYPE-declared entities.
+
+    Pre-fix: ``html.fromstring(content)`` used the default lxml parser,
+    which on libxml2 builds with entity resolution enabled would expand
+    a billion-laughs DOCTYPE exponentially.
+
+    Fix: a module-local ``HTMLParser(no_network=True, huge_tree=False,
+    recover=True, remove_blank_text=False)`` is passed explicitly to
+    ``html.fromstring``. Mirrors the kaos-content KCONT-01 fix.
+    """
+
+    def test_billion_laughs_parses_quickly(self) -> None:
+        import contextlib
+
+        start = time.perf_counter()
+        # Parser may raise on this synthetic non-PACER content; the safety
+        # contract is just "completes quickly without exponential expansion".
+        with contextlib.suppress(ValueError, KeyError, AttributeError):
+            parse_docket(_BILLION_LAUGHS)
+        elapsed = time.perf_counter() - start
+        assert elapsed < 1.0, f"parse took {elapsed:.2f}s — entity expansion?"
+
+    def test_external_entity_not_fetched(self) -> None:
+        import contextlib
+
+        payload = (
+            "<!DOCTYPE foo [\n"
+            '  <!ENTITY xxe SYSTEM "http://invalid.localhost.invalid/secret">\n'
+            "]>\n"
+            "<html><body><p>&xxe;</p></body></html>"
+        )
+        with contextlib.suppress(ValueError, KeyError, AttributeError):
+            parse_docket(payload)

@@ -13,7 +13,9 @@ from urllib.parse import urlsplit
 
 import httpx
 from kaos_core import ArtifactRetentionPolicy, KaosContext
+from kaos_core.exceptions import UnsafeURLError
 from kaos_core.logging import get_logger
+from kaos_core.security import KaosSecuritySettings, validate_outbound_url
 
 from kaos_source.connectors.base import (
     SourceConnector,
@@ -202,6 +204,23 @@ class HttpConnector(SourceConnector):
         parsed = urlsplit(url)
         timeout = s.timeout_seconds
         retry_limit = s.retry_limit
+        # KSRC-04: validate every outbound request — including each
+        # redirect hop — against the SSRF guard. httpx invokes this
+        # hook before sending the request, so a malicious 302 to
+        # http://169.254.169.254 is blocked before httpx connects.
+        sec_settings = self._security_settings(context)
+
+        async def _ssrf_request_hook(request: httpx.Request) -> None:
+            try:
+                validate_outbound_url(str(request.url), settings=sec_settings)
+            except UnsafeURLError as exc:
+                raise SourcePolicyError(
+                    "HTTP redirect blocked by SSRF guard",
+                    locator=str(request.url),
+                    reason=exc.reason,
+                    host=exc.host,
+                ) from exc
+
         async with self._domain_request_gate(parsed.netloc, context, s):
             for attempt in range(retry_limit + 1):
                 try:
@@ -212,6 +231,7 @@ class HttpConnector(SourceConnector):
                         http2=s.http2,
                         timeout=timeout,
                         transport=self._transport,
+                        event_hooks={"request": [_ssrf_request_hook]},
                     ) as client:
                         return await operation(client)
                 except SourceTransientError as exc:
@@ -263,6 +283,21 @@ class HttpConnector(SourceConnector):
 
     def _assert_policy(self, url: str, context: KaosContext) -> None:
         assert_roots_allow_uri(url, context.roots, schemes={"http", "https"})
+        # KSRC-04: kaos-core SSRF guard — blocks private networks,
+        # loopback, and known cloud metadata services by default.
+        # Configurable via KAOS_SECURITY_* env vars or the
+        # KaosSecuritySettings instance the caller injected. Layered
+        # *under* the explicit allowed_hosts allowlist below so the
+        # operator can opt internal hosts back in when they need to.
+        try:
+            validate_outbound_url(url, settings=self._security_settings(context))
+        except UnsafeURLError as exc:
+            raise SourcePolicyError(
+                "HTTP source URL blocked by SSRF guard",
+                locator=url,
+                reason=exc.reason,
+                host=exc.host,
+            ) from exc
         s = self._settings_for(context)
         allowed_hosts = s.allowed_hosts
         if not allowed_hosts:
@@ -271,6 +306,34 @@ class HttpConnector(SourceConnector):
         if any(self._host_matches_pattern(host, pattern) for pattern in allowed_hosts):
             return
         raise SourcePolicyError("HTTP source host is not allowed", locator=url, host=host)
+
+    def _security_settings(self, context: KaosContext) -> KaosSecuritySettings:
+        """Resolve KaosSecuritySettings, allowing the connector's own
+        allowed_hosts to flow into the SSRF guard's allowlist.
+
+        KSRC-04: this is the integration point for per-context overrides
+        of the SSRF guard. The default :class:`KaosSecuritySettings` is
+        env-derived; we union its ``allowed_hosts`` with the connector's
+        ``HttpSettings.allowed_hosts`` so an operator who allowlists a
+        host for routing also allowlists it for the SSRF guard.
+        """
+        from kaos_source.settings import KaosSourceHttpSettings
+
+        try:
+            http_s = KaosSourceHttpSettings.from_context(context)
+        except Exception:  # pragma: no cover — context wiring fallback
+            http_s = None
+
+        # Start from env-derived strict defaults, then merge in the
+        # HTTP connector's allowed_hosts so allowlisted internal hosts
+        # don't get rejected by the SSRF guard's private-network block.
+        sec = KaosSecuritySettings()
+        merged_hosts = list(sec.allowed_hosts)
+        if http_s is not None and http_s.allowed_hosts:
+            for entry in http_s.allowed_hosts:
+                if entry and entry not in merged_hosts:
+                    merged_hosts.append(entry)
+        return sec.model_copy(update={"allowed_hosts": merged_hosts})
 
     @staticmethod
     def _host_matches_pattern(host: str, pattern: str) -> bool:

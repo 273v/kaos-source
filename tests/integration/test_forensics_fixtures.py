@@ -139,11 +139,17 @@ class TestGovcertSamples:
         assert result.subject == "test mail eml parser"
         # Should have at least one attachment
         assert result.attachment_count >= 1
-        # Each attachment should have filename, content_type, md5
+        # KSRC-08: every attachment carries content_type plus both an MD5
+        # (legacy / eDiscovery compat) and a SHA-256 (authoritative).
         for att in result.attachments:
             assert att.content_type is not None
             assert att.md5 is not None
             assert len(att.md5) == 32
+            assert att.sha256 is not None
+            assert len(att.sha256) == 64
+            # Hashes are over the same payload — both should be present
+            # together or absent together.
+            assert (att.md5 is None) == (att.sha256 is None)
 
     def test_html_file_as_attachment(self) -> None:
         """HTML file attached to a text-body message (not an HTML body)."""

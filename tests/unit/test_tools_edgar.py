@@ -124,3 +124,64 @@ class TestEdgarLookup:
         tool = EdgarLookupTool()
         result = await tool.execute({"ticker": ""})
         assert result.isError
+
+
+# ---------------------------------------------------------------------------
+# KSRC-05 — EDGAR User-Agent format validation
+# ---------------------------------------------------------------------------
+
+
+class TestKSRC05EdgarUserAgentValidation:
+    """KSRC-05 — ``require_user_agent`` rejects malformed UA strings.
+
+    Pre-fix: an empty or malformed UA was accepted at config time and
+    surfaced as a cryptic 403/429 from the SEC at request time.
+
+    Fix: ``require_user_agent`` now rejects empty strings and strings
+    without ``"@"`` (the contact-email marker) before any HTTP call,
+    with a recovery-guidance error.
+    """
+
+    def test_default_ua_passes(self) -> None:
+        from kaos_source.settings.edgar import (
+            DEFAULT_EDGAR_USER_AGENT,
+            KaosSourceEdgarSettings,
+        )
+
+        s = KaosSourceEdgarSettings()
+        assert s.require_user_agent() == DEFAULT_EDGAR_USER_AGENT
+
+    def test_explicit_ua_with_email_passes(self) -> None:
+        from kaos_source.settings.edgar import KaosSourceEdgarSettings
+
+        ua = "AcmeCorp legal@acme.example"
+        s = KaosSourceEdgarSettings(user_agent=ua)
+        assert s.require_user_agent() == ua
+
+    def test_empty_ua_rejected(self) -> None:
+        from kaos_source.settings.edgar import KaosSourceEdgarSettings
+
+        s = KaosSourceEdgarSettings(user_agent="")
+        with pytest.raises(ValueError, match="User-Agent"):
+            s.require_user_agent()
+
+    def test_whitespace_only_ua_rejected(self) -> None:
+        from kaos_source.settings.edgar import KaosSourceEdgarSettings
+
+        s = KaosSourceEdgarSettings(user_agent="   \t\n  ")
+        with pytest.raises(ValueError, match="User-Agent"):
+            s.require_user_agent()
+
+    def test_ua_without_email_rejected(self) -> None:
+        from kaos_source.settings.edgar import KaosSourceEdgarSettings
+
+        # Mozilla / browser-shape UAs without an "@" — SEC rejects with 403.
+        s = KaosSourceEdgarSettings(user_agent="Mozilla/5.0 (compatible; testbot)")
+        with pytest.raises(ValueError, match="missing a contact email"):
+            s.require_user_agent()
+
+    def test_ua_is_trimmed(self) -> None:
+        from kaos_source.settings.edgar import KaosSourceEdgarSettings
+
+        s = KaosSourceEdgarSettings(user_agent="  AcmeCorp legal@acme.example  ")
+        assert s.require_user_agent() == "AcmeCorp legal@acme.example"

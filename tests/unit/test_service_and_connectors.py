@@ -625,3 +625,113 @@ class _FakeBrowserResponse:
     def __init__(self, *, status: int, headers: dict[str, str]) -> None:
         self.status = status
         self.headers = headers
+
+
+# ---------------------------------------------------------------------------
+# KSRC-04 — HttpConnector SSRF guard
+# ---------------------------------------------------------------------------
+
+
+async def test_http_connector_blocks_metadata_service_url(
+    runtime: KaosRuntime,
+) -> None:
+    """KSRC-04 — initial URL pointing at a cloud metadata service is blocked."""
+    transport = _StaticHttpTransport({})
+    service = SourceService(connectors=[HttpConnector(transport=transport)])
+    # Roots permissive so the SSRF guard is what actually blocks the request.
+    roots = [Root(uri="http://169.254.169.254/", name="metadata")]
+    context = _context(runtime, roots=roots)
+
+    with pytest.raises(SourcePolicyError) as excinfo:
+        await service.describe(
+            SourceLocator.http("http://169.254.169.254/latest/meta-data/"),
+            context,
+        )
+    assert "SSRF" in str(excinfo.value) or "metadata" in str(excinfo.value).lower()
+
+
+async def test_http_connector_blocks_private_network_url(
+    runtime: KaosRuntime,
+) -> None:
+    """KSRC-04 — initial URL pointing at an RFC1918 host is blocked."""
+    transport = _StaticHttpTransport({})
+    service = SourceService(connectors=[HttpConnector(transport=transport)])
+    roots = [Root(uri="http://10.0.0.5/", name="internal")]
+    context = _context(runtime, roots=roots)
+
+    with pytest.raises(SourcePolicyError) as excinfo:
+        await service.describe(SourceLocator.http("http://10.0.0.5/secret"), context)
+    assert "SSRF" in str(excinfo.value) or "private" in str(excinfo.value).lower()
+
+
+async def test_http_connector_blocks_loopback_url(
+    runtime: KaosRuntime,
+) -> None:
+    """KSRC-04 — loopback host is blocked even when allowed_hosts is empty."""
+    transport = _StaticHttpTransport({})
+    service = SourceService(connectors=[HttpConnector(transport=transport)])
+    roots = [Root(uri="http://127.0.0.1/", name="loopback")]
+    context = _context(runtime, roots=roots)
+
+    with pytest.raises(SourcePolicyError) as excinfo:
+        await service.describe(SourceLocator.http("http://127.0.0.1/admin"), context)
+    assert "SSRF" in str(excinfo.value) or "loopback" in str(excinfo.value).lower()
+
+
+async def test_http_connector_allows_private_via_env_opt_out(
+    runtime: KaosRuntime,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """KSRC-04 — KAOS_SECURITY_BLOCK_PRIVATE_NETWORKS=0 lets private hosts through.
+
+    Validates the configurability story: operators with legitimate
+    internal-network use cases can flip the strict default off via env.
+    """
+    monkeypatch.setenv("KAOS_SECURITY_BLOCK_PRIVATE_NETWORKS", "0")
+    transport = _StaticHttpTransport(
+        {
+            ("HEAD", "http://10.0.0.5/internal"): _http_response(
+                200,
+                b"",
+                headers={"content-type": "text/plain", "content-length": "4"},
+            ),
+        }
+    )
+    service = SourceService(connectors=[HttpConnector(transport=transport)])
+    roots = [Root(uri="http://10.0.0.5/", name="internal")]
+    context = _context(runtime, roots=roots)
+
+    # No exception — the SSRF guard is now permissive on private nets.
+    descriptor = await service.describe(SourceLocator.http("http://10.0.0.5/internal"), context)
+    assert descriptor.name == "internal"
+
+
+async def test_http_connector_allows_private_via_allowed_hosts(
+    runtime: KaosRuntime,
+) -> None:
+    """KSRC-04 — explicit allowed_hosts entry beats the SSRF block.
+
+    When the operator allowlists ``10.0.0.0/24`` in the connector's
+    ``allowed_hosts``, the SSRF guard reads the same allowlist (via
+    ``_security_settings``) and lets matching hosts through.
+    """
+    transport = _StaticHttpTransport(
+        {
+            ("HEAD", "http://10.0.0.5/api"): _http_response(
+                200,
+                b"",
+                headers={"content-type": "text/plain", "content-length": "4"},
+            ),
+        }
+    )
+    service = SourceService(connectors=[HttpConnector(transport=transport)])
+    roots = [Root(uri="http://10.0.0.5/", name="internal")]
+    context = _context(runtime, roots=roots)
+    # Exact-host entry — works for both kaos-source's fnmatch policy and
+    # the kaos-core SSRF guard's allowlist matcher. CIDR ranges like
+    # ``10.0.0.0/24`` are handled by the SSRF guard but not by kaos-source's
+    # fnmatch host policy (slash is a literal in fnmatch).
+    context.set_config("source_http_allowed_hosts", ["10.0.0.5"])
+
+    descriptor = await service.describe(SourceLocator.http("http://10.0.0.5/api"), context)
+    assert descriptor.name == "api"

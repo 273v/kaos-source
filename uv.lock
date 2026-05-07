@@ -528,9 +528,6 @@ content = [
     { name = "kaos-content", extra = ["html"] },
     { name = "kaos-nlp-core" },
 ]
-mcp = [
-    { name = "kaos-mcp" },
-]
 pacer = [
     { name = "lxml" },
 ]
@@ -554,13 +551,12 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "kaos-content", extras = ["html"], marker = "extra == 'content'", editable = "../kaos-content" },
     { name = "kaos-core", editable = "../kaos-core" },
-    { name = "kaos-mcp", marker = "extra == 'mcp'", editable = "../kaos-mcp" },
     { name = "kaos-nlp-core", marker = "extra == 'content'", editable = "../kaos-nlp-core" },
     { name = "lxml", marker = "extra == 'pacer'", specifier = ">=5.0.0" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.52.0" },
     { name = "pydantic", specifier = ">=2.11.0" },
 ]
-provides-extras = ["browser", "content", "mcp", "pacer"]
+provides-extras = ["browser", "content", "pacer"]
 
 [package.metadata.requires-dev]
 dev = [

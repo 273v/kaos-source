@@ -1342,3 +1342,123 @@ class TestArchiveMaterializeContainer:
         locator = SourceLocator.archive(zip_path)
         materialization = await connector.materialize(locator, context)
         assert materialization.descriptor.metadata["archive_format"] == "zip"
+
+
+# ---------------------------------------------------------------------------
+# KSRC-03 + KSRC-06 — archive bomb + symlink hardening
+# ---------------------------------------------------------------------------
+
+
+class TestKSRC03ArchiveBombProtection:
+    """KSRC-03 — decompression-ratio + cumulative-uncompressed caps."""
+
+    async def test_zip_high_ratio_blocked(self, tmp_path: Path, runtime: KaosRuntime) -> None:
+        # Construct a synthetic high-ratio member: 1 MiB of zeros compresses
+        # to ~1 KiB in DEFLATE — ratio ~1000:1, well above the 100:1 default.
+        zip_path = tmp_path / "bomb.zip"
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("zeros.bin", b"\x00" * (1024 * 1024))
+
+        connector = ArchiveConnector()
+        context = _context(runtime, roots=[Root(uri=tmp_path.resolve().as_uri(), name="tmp")])
+        locator = SourceLocator.archive(zip_path)
+
+        with pytest.raises(SourceValidationError) as excinfo:
+            await connector.discover(locator, context)
+        assert "ratio" in str(excinfo.value).lower()
+
+    async def test_zip_high_ratio_allowed_when_disabled(
+        self, tmp_path: Path, runtime: KaosRuntime
+    ) -> None:
+        # max_decompression_ratio=0 disables the check.
+        zip_path = tmp_path / "bomb.zip"
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("zeros.bin", b"\x00" * (1024 * 1024))
+
+        connector = ArchiveConnector()
+        context = _context(runtime, roots=[Root(uri=tmp_path.resolve().as_uri(), name="tmp")])
+        locator = SourceLocator.archive(zip_path)
+        page = await connector.discover(
+            locator,
+            context,
+            options=SourceDiscoverOptions(max_decompression_ratio=0.0),
+        )
+        assert len(page.items) == 1
+
+    async def test_total_uncompressed_cap(self, tmp_path: Path, runtime: KaosRuntime) -> None:
+        # Two members of 1 KiB each. Cap at 1500 bytes — second member
+        # pushes us over.
+        zip_path = _make_zip(
+            tmp_path / "two.zip",
+            {"a.bin": b"a" * 1024, "b.bin": b"b" * 1024},
+        )
+        connector = ArchiveConnector()
+        context = _context(runtime, roots=[Root(uri=tmp_path.resolve().as_uri(), name="tmp")])
+        locator = SourceLocator.archive(zip_path)
+
+        with pytest.raises(SourceValidationError) as excinfo:
+            await connector.discover(
+                locator,
+                context,
+                options=SourceDiscoverOptions(max_total_uncompressed=1500),
+            )
+        assert "total uncompressed" in str(excinfo.value).lower()
+
+
+class TestKSRC06ArchiveSymlinks:
+    """KSRC-06 — TAR symlinks/hardlinks must not surface as discoverable members."""
+
+    async def test_tar_symlink_skipped_by_default(
+        self, tmp_path: Path, runtime: KaosRuntime
+    ) -> None:
+        tar_path = tmp_path / "sym.tar"
+        with tarfile.open(tar_path, "w") as tar:
+            import io
+
+            # Real file member — should appear.
+            real = tarfile.TarInfo(name="real.txt")
+            real.size = 5
+            tar.addfile(real, io.BytesIO(b"hello"))
+            # Symlink member pointing outside the archive — must be skipped.
+            link = tarfile.TarInfo(name="escape.txt")
+            link.type = tarfile.SYMTYPE
+            link.linkname = "../../../etc/passwd"
+            tar.addfile(link)
+            # Hardlink member — also skipped.
+            hard = tarfile.TarInfo(name="hard")
+            hard.type = tarfile.LNKTYPE
+            hard.linkname = "real.txt"
+            tar.addfile(hard)
+
+        connector = ArchiveConnector()
+        context = _context(runtime, roots=[Root(uri=tmp_path.resolve().as_uri(), name="tmp")])
+        locator = SourceLocator.archive(tar_path)
+        page = await connector.discover(locator, context)
+        names = {item.name for item in page.items}
+        assert names == {"real.txt"}, f"expected only real.txt, got {names}"
+
+    async def test_tar_symlink_passes_when_explicitly_allowed(
+        self, tmp_path: Path, runtime: KaosRuntime
+    ) -> None:
+        tar_path = tmp_path / "sym.tar"
+        with tarfile.open(tar_path, "w") as tar:
+            import io
+
+            real = tarfile.TarInfo(name="real.txt")
+            real.size = 5
+            tar.addfile(real, io.BytesIO(b"hello"))
+            link = tarfile.TarInfo(name="link.txt")
+            link.type = tarfile.SYMTYPE
+            link.linkname = "real.txt"
+            tar.addfile(link)
+
+        connector = ArchiveConnector()
+        context = _context(runtime, roots=[Root(uri=tmp_path.resolve().as_uri(), name="tmp")])
+        locator = SourceLocator.archive(tar_path)
+        page = await connector.discover(
+            locator,
+            context,
+            options=SourceDiscoverOptions(allow_symlinks=True),
+        )
+        names = {item.name for item in page.items}
+        assert names == {"real.txt", "link.txt"}

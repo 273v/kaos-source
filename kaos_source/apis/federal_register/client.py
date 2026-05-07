@@ -31,7 +31,9 @@ from typing import Any
 
 import httpx
 from kaos_core.logging import get_logger
+from kaos_core.security import read_capped_bytes
 
+from kaos_source.apis._http import fetch_json, fetch_text, raise_api_status
 from kaos_source.apis.federal_register.models import FRAgency, FRDocument, FRSearchResult
 from kaos_source.settings.federal_register import KaosSourceFRSettings
 
@@ -231,13 +233,13 @@ async def search_documents(
     if docket_id:
         params.append(("conditions[docket_id]", docket_id))
 
+    url = f"{_BASE_URL}/documents.json"
     async with httpx.AsyncClient(
         timeout=s.timeout,
         headers=_api_headers(s),
     ) as client:
-        resp = await client.get(f"{_BASE_URL}/documents.json", params=params)
-        resp.raise_for_status()
-        data = resp.json()
+        # KSRC-02 + KSRC-07.
+        data = await fetch_json(client, url, api="FederalRegister", params=dict(params))
 
     documents = [_parse_document(d) for d in data.get("results", [])]
     return FRSearchResult(
@@ -269,13 +271,13 @@ async def get_document(
     s = KaosSourceFRSettings.resolve(settings)
     params: list[tuple[str, str | int | float | None]] = [("fields[]", f) for f in _DETAIL_FIELDS]
 
+    url = f"{_BASE_URL}/documents/{document_number}.json"
     async with httpx.AsyncClient(
         timeout=s.timeout,
         headers=_api_headers(s),
     ) as client:
-        resp = await client.get(f"{_BASE_URL}/documents/{document_number}.json", params=params)
-        resp.raise_for_status()
-        data = resp.json()
+        # KSRC-02 + KSRC-07.
+        data = await fetch_json(client, url, api="FederalRegister", params=dict(params))
 
     return _parse_document(data)
 
@@ -294,13 +296,13 @@ async def get_agencies(
     """
     s = KaosSourceFRSettings.resolve(settings)
 
+    url = f"{_BASE_URL}/agencies.json"
     async with httpx.AsyncClient(
         timeout=s.timeout,
         headers=_api_headers(s),
     ) as client:
-        resp = await client.get(f"{_BASE_URL}/agencies.json")
-        resp.raise_for_status()
-        data = resp.json()
+        # KSRC-02 + KSRC-07.
+        data = await fetch_json(client, url, api="FederalRegister")
 
     return [_parse_agency(a) for a in data]
 
@@ -342,13 +344,14 @@ async def fetch_document_content(
         follow_redirects=True,
         headers={"User-Agent": s.user_agent},
     ) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
-
-    if format == "pdf":
-        return resp.content
-
-    text = resp.text
+        # KSRC-02 + KSRC-07: streamed read with size cap and typed
+        # retryable errors. PDFs are returned as bytes; text/xml/html
+        # are decoded.
+        if format == "pdf":
+            async with client.stream("GET", url) as resp:
+                raise_api_status(resp, locator=url, api="FederalRegister")
+                return await read_capped_bytes(resp)
+        text = await fetch_text(client, url, api="FederalRegister")
 
     # The "text" format returns HTML-wrapped <pre> content — strip HTML tags
     if format == "text" and "<html" in text[:200].lower():

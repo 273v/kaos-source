@@ -5,32 +5,53 @@ build-backend = "hatchling.build"
 [project]
 name = "kaos-source"
 dynamic = ["version"]
-description = "KAOS-native source discovery and materialization layer"
+description = "KAOS-native source discovery and materialization — filesystem, archive, HTTP, browser, plus REST connectors for Federal Register / eCFR / EDGAR / GovInfo / GLEIF and forensic parsers for VCard / EML / MBOX / PACER / EXIF"
 readme = "README.md"
 requires-python = ">=3.13"
-license = { text = "LicenseRef-Proprietary" }
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 authors = [
   { name = "273 Ventures LLC", email = "it@273ventures.com" },
+]
+maintainers = [
+  { name = "Michael Bommarito", email = "mike@273ventures.com" },
+]
+keywords = [
+  "agentic",
+  "edgar",
+  "ediscovery",
+  "federal-register",
+  "kaos",
+  "legal-tech",
+  "mcp",
+  "model-context-protocol",
+  "source-discovery",
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
   "Programming Language :: Python :: Implementation :: CPython",
   "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Internet :: WWW/HTTP",
   "Typing :: Typed",
 ]
 dependencies = [
   "httpx>=0.28.1",
-  "kaos-core>=0.1.0",
+  # kaos_core.security (validate_outbound_url, read_capped_json) debuts
+  # in 0.1.0a4. Required by KSRC-02 + KSRC-04 + KSRC-07 fixes.
+  "kaos-core>=0.1.0a4,<0.2",
   "pydantic>=2.11.0",
 ]
 
 [dependency-groups]
 dev = [
-  "kaos-content[html]>=0.1.0",
+  # kaos-content 0.1.0a2 carries the KCONT-01 XXE fix the platform-wide
+  # parser audit produced; pin the floor so dev installs receive it.
+  "kaos-content[html]>=0.1.0a2",
   "kaos-mcp>=0.1.0",
   "kaos-nlp-core>=0.1.0",
   "lxml>=5.0.0",
@@ -51,20 +72,26 @@ browser = [
   "playwright>=1.52.0",
 ]
 content = [
-  "kaos-content[html]>=0.1.0",
+  # KCONT-01 (XXE guard) ships in kaos-content 0.1.0a2; pin the floor
+  # so installations of the [content] extra get the safer parser.
+  "kaos-content[html]>=0.1.0a2",
   "kaos-nlp-core>=0.1.0",
-]
-mcp = [
-  "kaos-mcp>=0.1.0",
 ]
 pacer = [
   "lxml>=5.0.0",
 ]
+# Note: the [mcp] extra (pinning kaos-mcp>=0.1.0) is intentionally
+# absent at v0.1.0a1. kaos-mcp ships in Wave 3; ``uv lock`` is strict
+# and refuses to resolve any declared extra whose sibling isn't on
+# PyPI yet (per docs/oss/ F009 lesson #4). Re-add this extra in
+# 0.1.0a2 once kaos-mcp is on PyPI.
 
 [project.urls]
-Homepage = "https://273ventures.com"
-Documentation = "https://docs.273ventures.com"
-Repository = "https://github.com/273v/kaos-modules"
+Homepage = "https://kelvin.legal"
+Documentation = "https://docs.kelvin.legal"
+Repository = "https://github.com/273v/kaos-source"
+Issues = "https://github.com/273v/kaos-source/issues"
+Changelog = "https://github.com/273v/kaos-source/blob/main/CHANGELOG.md"
 
 [tool.hatch.version]
 path = "kaos_source/_version.py"
@@ -73,8 +100,10 @@ path = "kaos_source/_version.py"
 include = [
   "/kaos_source",
   "/README.md",
+  "/LICENSE",
+  "/NOTICE",
+  "/CHANGELOG.md",
   "/CLAUDE.md",
-  "/docs",
   "/tests",
 ]
 

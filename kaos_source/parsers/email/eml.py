@@ -49,7 +49,23 @@ class Attachment(BaseModel):
     content_type: str
     size: int | None = None
     content_id: str | None = Field(None, description="For inline images (CID)")
-    md5: str | None = None
+    md5: str | None = Field(
+        None,
+        description=(
+            "MD5 of the decoded payload. Retained for eDiscovery / forensic "
+            "tooling compatibility (Enron NSRL, EnCase, Magnet); not "
+            "cryptographically authoritative — pair with `sha256` for any "
+            "integrity claim."
+        ),
+    )
+    sha256: str | None = Field(
+        None,
+        description=(
+            "SHA-256 of the decoded payload. Authoritative integrity field "
+            "(KSRC-08). Computed alongside `md5` so legacy eDiscovery "
+            "consumers continue to work without changes."
+        ),
+    )
 
 
 class ReceivedHop(BaseModel):
@@ -281,10 +297,17 @@ def _extract_attachments(msg: EmailMessage) -> list[Attachment]:
         if content_id:
             content_id = content_id.strip("<>")
 
-        # Get content for size + hash
+        # Get content for size + hashes. KSRC-08: SHA-256 is authoritative;
+        # MD5 retained for eDiscovery tool compat.
         payload = part.get_payload(decode=True)
-        size = len(payload) if isinstance(payload, bytes) else None
-        md5 = hashlib.md5(payload).hexdigest() if isinstance(payload, bytes) else None
+        if isinstance(payload, bytes):
+            size: int | None = len(payload)
+            md5: str | None = hashlib.md5(payload).hexdigest()
+            sha256: str | None = hashlib.sha256(payload).hexdigest()
+        else:
+            size = None
+            md5 = None
+            sha256 = None
 
         attachments.append(
             Attachment(
@@ -293,6 +316,7 @@ def _extract_attachments(msg: EmailMessage) -> list[Attachment]:
                 size=size,
                 content_id=content_id,
                 md5=md5,
+                sha256=sha256,
             )
         )
 

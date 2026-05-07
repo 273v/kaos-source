@@ -35,6 +35,7 @@ if TYPE_CHECKING:
 import httpx
 from kaos_core.logging import get_logger
 
+from kaos_source.apis._http import fetch_json, fetch_text
 from kaos_source.apis.edgar.models import (
     EdgarCompany,
     EdgarFiling,
@@ -48,6 +49,7 @@ _EFTS_URL = "https://efts.sec.gov/LATEST/search-index"
 _SUBMISSIONS_URL = "https://data.sec.gov/submissions"
 _TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 _ARCHIVES_URL = "https://www.sec.gov/Archives/edgar/data"
+
 
 # Common form types
 FORM_TYPES = (
@@ -213,9 +215,9 @@ async def search_filings(
         timeout=s.timeout,
         headers={"User-Agent": ua, "Accept": "application/json"},
     ) as client:
-        resp = await client.get(_EFTS_URL, params=params)
-        resp.raise_for_status()
-        data = resp.json()
+        # KSRC-02 + KSRC-07: streamed JSON read with size cap and typed
+        # retryable errors (Retry-After honored).
+        data = await fetch_json(client, _EFTS_URL, api="EDGAR", params=params)
 
     hits = data.get("hits", {})
     total_obj = hits.get("total", {})
@@ -254,13 +256,12 @@ async def get_company(
     ua = s.require_user_agent()
     cik_padded = cik.zfill(10)
 
+    submissions_url = f"{_SUBMISSIONS_URL}/CIK{cik_padded}.json"
     async with httpx.AsyncClient(
         timeout=s.timeout,
         headers={"User-Agent": ua, "Accept": "application/json"},
     ) as client:
-        resp = await client.get(f"{_SUBMISSIONS_URL}/CIK{cik_padded}.json")
-        resp.raise_for_status()
-        data = resp.json()
+        data = await fetch_json(client, submissions_url, api="EDGAR")
 
     tickers = data.get("tickers", [])
     exchanges = data.get("exchanges", [])
@@ -308,9 +309,7 @@ async def lookup_ticker(
         timeout=s.timeout,
         headers={"User-Agent": ua, "Accept": "application/json"},
     ) as client:
-        resp = await client.get(_TICKERS_URL)
-        resp.raise_for_status()
-        data = resp.json()
+        data = await fetch_json(client, _TICKERS_URL, api="EDGAR")
 
     for entry in data.values():
         if entry.get("ticker") == ticker_upper:
@@ -348,9 +347,9 @@ async def fetch_filing_document(
         headers={"User-Agent": ua},
         follow_redirects=True,
     ) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
-        return resp.text
+        # KSRC-02 + KSRC-07: streamed text read with size cap and typed
+        # retryable errors. Filing bodies are HTML/text, not JSON.
+        return await fetch_text(client, url, api="EDGAR")
 
 
 def filing_html_to_document(

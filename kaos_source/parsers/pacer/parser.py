@@ -152,10 +152,23 @@ def parse_docket(html_content: str) -> DocketInfo:
         ValueError: If the HTML cannot be parsed as a PACER docket.
     """
     from lxml import html
+    from lxml.html import HTMLParser
+
+    # KSRC-01: XXE-safe parser. PACER docket HTML can contain DOCTYPE
+    # declarations from the email-export pipeline; ``no_network=True``
+    # blocks SYSTEM-entity fetches and ``huge_tree=False`` (libxml2
+    # default) keeps the input-size and entity-expansion caps in place.
+    # Mirrors the kaos-content KCONT-01 fix; identical contract.
+    safe_parser = HTMLParser(
+        no_network=True,
+        huge_tree=False,
+        recover=True,
+        remove_blank_text=False,
+    )
 
     # Decode quoted-printable encoding if present
     content = html_content.replace("=3D", "=").replace("=\n", "")
-    doc = html.fromstring(content)
+    doc = html.fromstring(content, parser=safe_parser)
 
     # --- Case info ---
     case_info: dict[str, Any] = {

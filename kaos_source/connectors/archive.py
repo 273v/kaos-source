@@ -181,6 +181,12 @@ class ArchiveConnector(SourceConnector):
         options: SourceDiscoverOptions,
     ) -> list[SourceDescriptor]:
         entries: list[SourceDescriptor] = []
+        # KSRC-03: running totals for the cumulative uncompressed cap and
+        # the per-member decompression-ratio check.
+        total_uncompressed = 0
+        max_total = options.max_total_uncompressed
+        max_ratio = options.max_decompression_ratio
+
         if zipfile.is_zipfile(archive_path):
             with zipfile.ZipFile(archive_path) as archive:
                 for info in sorted(archive.infolist(), key=lambda item: item.filename):
@@ -188,6 +194,35 @@ class ArchiveConnector(SourceConnector):
                         continue
                     if self._skip_member(info.filename, info.file_size, options):
                         continue
+                    # KSRC-03: per-member ratio check. ZIP exposes both
+                    # compressed and uncompressed sizes in the central
+                    # directory, so the bomb is detectable without ever
+                    # decompressing a single byte.
+                    if (
+                        max_ratio > 0
+                        and info.compress_size > 0
+                        and info.file_size / info.compress_size > max_ratio
+                    ):
+                        ratio_msg = (
+                            f"Archive member {info.filename!r} exceeds "
+                            f"decompression ratio cap "
+                            f"({info.file_size}/{info.compress_size} > {max_ratio})"
+                        )
+                        raise SourceValidationError(
+                            ratio_msg,
+                            archive_path=str(archive_path),
+                            member_path=info.filename,
+                        )
+                    # KSRC-03: cumulative cap. A single legitimate member
+                    # is fine; ten thousand legitimate members summing to
+                    # 50 TiB is a bomb.
+                    total_uncompressed += info.file_size
+                    if max_total and total_uncompressed > max_total:
+                        raise SourceValidationError(
+                            "Archive total uncompressed size exceeds cap "
+                            f"({total_uncompressed} > {max_total})",
+                            archive_path=str(archive_path),
+                        )
                     entries.append(self._descriptor_for_zip_member(archive_path, info))
             return entries
 
@@ -196,8 +231,30 @@ class ArchiveConnector(SourceConnector):
                 for info in sorted(archive.getmembers(), key=lambda item: item.name):
                     if info.isdir() and not options.include_directories:
                         continue
+                    # KSRC-06: skip TAR symlinks / hardlinks unless
+                    # explicitly opted in. Blocks the ``../../etc/passwd``
+                    # archive-escape attack vector. ZIP cannot encode
+                    # symlinks at the format level.
+                    if (info.issym() or info.islnk()) and not options.allow_symlinks:
+                        logger.warning(
+                            "Skipping TAR symlink/hardlink member %s (-> %s)",
+                            info.name,
+                            info.linkname,
+                        )
+                        continue
                     if self._skip_member(info.name, info.size, options):
                         continue
+                    # KSRC-03: cumulative uncompressed cap. TAR doesn't
+                    # have a per-entry compressed size in the same way
+                    # ZIP does, so we can't compute a ratio here, but
+                    # the total cap still applies.
+                    total_uncompressed += info.size
+                    if max_total and total_uncompressed > max_total:
+                        raise SourceValidationError(
+                            "Archive total uncompressed size exceeds cap "
+                            f"({total_uncompressed} > {max_total})",
+                            archive_path=str(archive_path),
+                        )
                     entries.append(self._descriptor_for_tar_member(archive_path, info))
             return entries
 

@@ -27,6 +27,7 @@ from typing import Any
 
 import httpx
 
+from kaos_source.apis._http import fetch_json, raise_api_status
 from kaos_source.apis.gleif.models import LEIAddress, LEIEntity
 
 _BASE_URL = "https://api.gleif.org/api/v1"
@@ -103,16 +104,18 @@ async def search_lei(
         Tuple of (entities, total_count).
     """
     async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.get(
+        # KSRC-02 + KSRC-07: streamed JSON read with size cap and typed
+        # retryable errors (Retry-After honored).
+        data = await fetch_json(
+            client,
             f"{_BASE_URL}/lei-records",
+            api="GLEIF",
             params={
                 "filter[entity.legalName]": name,
                 "page[number]": page,
                 "page[size]": min(per_page, 200),
             },
         )
-        resp.raise_for_status()
-        data = resp.json()
 
     records = data.get("data", [])
     total = data.get("meta", {}).get("pagination", {}).get("total", len(records))
@@ -134,12 +137,19 @@ async def get_lei(
     Returns:
         LEIEntity or None if not found.
     """
+    url = f"{_BASE_URL}/lei-records/{lei}"
     async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.get(f"{_BASE_URL}/lei-records/{lei}")
-        if resp.status_code == 404:
-            return None
-        resp.raise_for_status()
-        data = resp.json()
+        # KSRC-02 + KSRC-07: streamed read with size cap; raise typed
+        # transient/access errors with Retry-After. 404 returns None
+        # rather than propagating SourceNotFoundError because the
+        # caller's contract is "lookup, may not exist".
+        from kaos_core.security import read_capped_json
+
+        async with client.stream("GET", url) as resp:
+            if resp.status_code == 404:
+                return None
+            raise_api_status(resp, locator=url, api="GLEIF")
+            data = await read_capped_json(resp)
 
     record = data.get("data")
     if not record:
@@ -176,9 +186,8 @@ async def search_lei_by_country(
         params["filter[entity.legalName]"] = name
 
     async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.get(f"{_BASE_URL}/lei-records", params=params)
-        resp.raise_for_status()
-        data = resp.json()
+        # KSRC-02 + KSRC-07.
+        data = await fetch_json(client, f"{_BASE_URL}/lei-records", api="GLEIF", params=params)
 
     records = data.get("data", [])
     total = data.get("meta", {}).get("pagination", {}).get("total", len(records))

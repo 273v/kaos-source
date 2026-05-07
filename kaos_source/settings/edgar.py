@@ -47,9 +47,13 @@ class KaosSourceEdgarSettings(ModuleSettings):
         """Return the user-agent string, raising a clear error if not configured.
 
         The SEC requires an honest User-Agent header identifying your
-        organization and contact email on all EDGAR requests.
+        organization and contact email on all EDGAR requests, of the form
+        ``"YourCompany contact@company.com"``. KSRC-05: a missing or
+        malformed UA raises here at config time rather than producing a
+        cryptic 403/429 from the SEC at request time.
         """
-        if not self.user_agent:
+        ua = (self.user_agent or "").strip()
+        if not ua:
             msg = (
                 "SEC EDGAR requires a User-Agent header identifying your organization "
                 "and contact email (e.g. 'YourCompany contact@company.com'). "
@@ -58,4 +62,18 @@ class KaosSourceEdgarSettings(ModuleSettings):
                 "See https://www.sec.gov/os/accessing-edgar-data for details."
             )
             raise ValueError(msg)
-        return self.user_agent
+        # KSRC-05: enforce the SEC-required shape — at minimum, must contain
+        # an "@" so a contact email is plausibly present. We do not regex
+        # full RFC 5322 because the SEC accepts informal forms (e.g.
+        # "ACME Corp contact@acme.example") but rejects bare strings
+        # ("test", "Mozilla/5.0", a missing header) with HTTP 403.
+        if "@" not in ua:
+            msg = (
+                f"EDGAR User-Agent {ua!r} is missing a contact email. "
+                "SEC requires the form 'YourCompany contact@company.com'. "
+                "Update KAOS_SOURCE_EDGAR_USER_AGENT (or legacy "
+                "SEC_EDGAR_USER_AGENT) before making EDGAR requests. "
+                "See https://www.sec.gov/os/accessing-edgar-data for details."
+            )
+            raise ValueError(msg)
+        return ua
