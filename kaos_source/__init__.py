@@ -35,6 +35,11 @@ without reaching for the tool layer.
 from kaos_source import apis as _apis  # noqa: F401
 from kaos_source import parsers as _parsers  # noqa: F401
 from kaos_source._version import __version__
+from kaos_source.apis.ecfr.tools import register_ecfr_tools
+from kaos_source.apis.edgar.tools import register_edgar_tools
+from kaos_source.apis.federal_register.tools import register_federal_register_tools
+from kaos_source.apis.gleif.tools import register_gleif_tools
+from kaos_source.apis.govinfo.tools import register_govinfo_tools
 
 # --- ABCs + Protocols (Track 1 chunk 1) -------------------------------------
 from kaos_source.base import (
@@ -99,12 +104,7 @@ from kaos_source.registry import (
 )
 from kaos_source.runtime.service import SourceService
 from kaos_source.tools import register_source_tools
-from kaos_source.tools_ecfr import register_ecfr_tools
-from kaos_source.tools_edgar import register_edgar_tools
-from kaos_source.tools_federal_register import register_federal_register_tools
 from kaos_source.tools_forensics import register_forensics_tools
-from kaos_source.tools_gleif import register_gleif_tools
-from kaos_source.tools_govinfo import register_govinfo_tools
 from kaos_source.tools_pacer import register_pacer_tools
 from kaos_source.tools_vcard import register_vcard_tools
 

@@ -8,7 +8,7 @@ import pytest
 from kaos_core import KaosRuntime
 
 from kaos_source.apis.federal_register.models import FRAgency, FRDocument, FRSearchResult
-from kaos_source.tools_federal_register import (
+from kaos_source.apis.federal_register.tools import (
     FRAgenciesTool,
     FRGetContentTool,
     FRGetDocumentTool,

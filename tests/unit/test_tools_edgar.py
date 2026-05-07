@@ -7,13 +7,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from kaos_core import KaosRuntime
 
-from kaos_source.connectors.edgar import EdgarCompany, EdgarFiling, EdgarSearchResponse
-from kaos_source.tools_edgar import (
+from kaos_source.apis.edgar.tools import (
     EdgarCompanyTool,
     EdgarLookupTool,
     EdgarSearchTool,
     register_edgar_tools,
 )
+from kaos_source.connectors.edgar import EdgarCompany, EdgarFiling, EdgarSearchResponse
 
 _SAMPLE_FILING = EdgarFiling(
     accession_number="0000320193-24-000123",

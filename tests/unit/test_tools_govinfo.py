@@ -7,17 +7,17 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from kaos_core import KaosRuntime
 
+from kaos_source.apis.govinfo.tools import (
+    GovInfoCollectionsTool,
+    GovInfoGetPackageTool,
+    GovInfoSearchTool,
+    register_govinfo_tools,
+)
 from kaos_source.connectors.govinfo import (
     GovInfoCollection,
     GovInfoPackage,
     GovInfoSearchResponse,
     GovInfoSearchResult,
-)
-from kaos_source.tools_govinfo import (
-    GovInfoCollectionsTool,
-    GovInfoGetPackageTool,
-    GovInfoSearchTool,
-    register_govinfo_tools,
 )
 
 # ---------------------------------------------------------------------------

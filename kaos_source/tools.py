@@ -634,13 +634,15 @@ def register_source_tools(runtime: KaosRuntime) -> int:
         runtime.tools.register_tool(tool)
     count = len(tools)
 
-    # Register all data retrieval connector tools
-    from kaos_source.tools_ecfr import register_ecfr_tools
-    from kaos_source.tools_edgar import register_edgar_tools
-    from kaos_source.tools_federal_register import register_federal_register_tools
+    # Register all data retrieval connector tools (cohesive locations
+    # post-Track-1: API tools live in apis/<X>/tools.py; parser tools
+    # live next to their parsers — see chunk 8 commits).
+    from kaos_source.apis.ecfr.tools import register_ecfr_tools
+    from kaos_source.apis.edgar.tools import register_edgar_tools
+    from kaos_source.apis.federal_register.tools import register_federal_register_tools
+    from kaos_source.apis.gleif.tools import register_gleif_tools
+    from kaos_source.apis.govinfo.tools import register_govinfo_tools
     from kaos_source.tools_forensics import register_forensics_tools
-    from kaos_source.tools_gleif import register_gleif_tools
-    from kaos_source.tools_govinfo import register_govinfo_tools
     from kaos_source.tools_pacer import register_pacer_tools
     from kaos_source.tools_vcard import register_vcard_tools
 

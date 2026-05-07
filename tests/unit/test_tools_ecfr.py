@@ -9,7 +9,7 @@ from kaos_core import KaosRuntime
 
 from kaos_source.apis.ecfr.client import get_latest_date
 from kaos_source.apis.ecfr.models import ECFRStructureNode, ECFRTitle
-from kaos_source.tools_ecfr import (
+from kaos_source.apis.ecfr.tools import (
     ECFRContentTool,
     ECFRListTitlesTool,
     ECFRSearchTool,
