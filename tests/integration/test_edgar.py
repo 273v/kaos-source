@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
+from kaos_source.apis.edgar.tools import EdgarCompanyTool, EdgarLookupTool, EdgarSearchTool
 from kaos_source.connectors.edgar import get_company, lookup_ticker, search_filings
-from kaos_source.tools_edgar import EdgarCompanyTool, EdgarLookupTool, EdgarSearchTool
 
 pytestmark = pytest.mark.integration
 

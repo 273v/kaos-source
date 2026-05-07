@@ -8,17 +8,17 @@ from __future__ import annotations
 
 import pytest
 
+from kaos_source.apis.ecfr.tools import (
+    ECFRContentTool,
+    ECFRListTitlesTool,
+    ECFRSearchTool,
+    ECFRStructureTool,
+)
 from kaos_source.connectors.ecfr import (
     get_agencies,
     get_section_content,
     get_title_structure,
     get_titles,
-)
-from kaos_source.tools_ecfr import (
-    ECFRContentTool,
-    ECFRListTitlesTool,
-    ECFRSearchTool,
-    ECFRStructureTool,
 )
 
 pytestmark = pytest.mark.integration

@@ -26,7 +26,7 @@ class TestFRBattle:
 
     async def test_find_recent_epa_rules(self) -> None:
         """Agent: 'Find recent EPA final rules about air quality'"""
-        from kaos_source.tools_federal_register import FRSearchTool
+        from kaos_source.apis.federal_register.tools import FRSearchTool
 
         tool = FRSearchTool()
         result = await tool.execute(
@@ -47,7 +47,7 @@ class TestFRBattle:
 
     async def test_get_specific_executive_order(self) -> None:
         """Agent: 'Get details on a specific FR document'"""
-        from kaos_source.tools_federal_register import FRGetDocumentTool, FRSearchTool
+        from kaos_source.apis.federal_register.tools import FRGetDocumentTool, FRSearchTool
 
         # First find a presidential document
         search = FRSearchTool()
@@ -72,7 +72,7 @@ class TestFRBattle:
 
     async def test_read_fr_document_text(self) -> None:
         """Agent: 'Read the full text of this Federal Register notice'"""
-        from kaos_source.tools_federal_register import FRGetContentTool, FRSearchTool
+        from kaos_source.apis.federal_register.tools import FRGetContentTool, FRSearchTool
 
         # Find a notice
         search = FRSearchTool()
@@ -102,7 +102,7 @@ class TestFRBattle:
 
     async def test_find_sec_related_rules(self) -> None:
         """Agent: 'What SEC rules were published in January 2024?'"""
-        from kaos_source.tools_federal_register import FRSearchTool
+        from kaos_source.apis.federal_register.tools import FRSearchTool
 
         tool = FRSearchTool()
         result = await tool.execute(
@@ -121,7 +121,7 @@ class TestFRBattle:
 
     async def test_search_cfr_references(self) -> None:
         """Agent: 'Find Federal Register documents referencing 40 CFR Part 82'"""
-        from kaos_source.tools_federal_register import FRSearchTool
+        from kaos_source.apis.federal_register.tools import FRSearchTool
 
         tool = FRSearchTool()
         result = await tool.execute(
@@ -145,7 +145,7 @@ class TestECFRBattle:
 
     async def test_browse_title40_structure(self) -> None:
         """Agent: 'Show me the structure of Title 40 (Environmental Protection)'"""
-        from kaos_source.tools_ecfr import ECFRStructureTool
+        from kaos_source.apis.ecfr.tools import ECFRStructureTool
 
         tool = ECFRStructureTool()
         result = await tool.execute(
@@ -163,7 +163,7 @@ class TestECFRBattle:
 
     async def test_search_ozone_regulations(self) -> None:
         """Agent: 'Find sections in Title 40 about ozone'"""
-        from kaos_source.tools_ecfr import ECFRSearchTool
+        from kaos_source.apis.ecfr.tools import ECFRSearchTool
 
         tool = ECFRSearchTool()
         result = await tool.execute(
@@ -184,7 +184,7 @@ class TestECFRBattle:
 
     async def test_read_specific_cfr_section(self) -> None:
         """Agent: 'Read 40 CFR § 82.1 — Purpose and scope of ozone protection'"""
-        from kaos_source.tools_ecfr import ECFRContentTool
+        from kaos_source.apis.ecfr.tools import ECFRContentTool
 
         tool = ECFRContentTool()
         result = await tool.execute(
@@ -203,7 +203,7 @@ class TestECFRBattle:
 
     async def test_browse_all_cfr_titles(self) -> None:
         """Agent: 'List all CFR titles'"""
-        from kaos_source.tools_ecfr import ECFRListTitlesTool
+        from kaos_source.apis.ecfr.tools import ECFRListTitlesTool
 
         tool = ECFRListTitlesTool()
         result = await tool.execute({})
@@ -219,7 +219,7 @@ class TestECFRBattle:
 
     async def test_read_tax_code_section(self) -> None:
         """Agent: 'Read a section from Title 26 (Internal Revenue)'"""
-        from kaos_source.tools_ecfr import ECFRContentTool
+        from kaos_source.apis.ecfr.tools import ECFRContentTool
 
         tool = ECFRContentTool()
         result = await tool.execute(
@@ -250,7 +250,7 @@ class TestGovInfoBattle:
 
     async def test_search_congressional_bills(self) -> None:
         """Agent: 'Find congressional bills about artificial intelligence'"""
-        from kaos_source.tools_govinfo import GovInfoSearchTool
+        from kaos_source.apis.govinfo.tools import GovInfoSearchTool
 
         tool = GovInfoSearchTool()
         result = await tool.execute(
@@ -267,7 +267,7 @@ class TestGovInfoBattle:
 
     async def test_get_package_details(self) -> None:
         """Agent: 'Get details on this government document package'"""
-        from kaos_source.tools_govinfo import GovInfoGetPackageTool, GovInfoSearchTool
+        from kaos_source.apis.govinfo.tools import GovInfoGetPackageTool, GovInfoSearchTool
 
         # Search first
         search = GovInfoSearchTool()
@@ -290,7 +290,7 @@ class TestGovInfoBattle:
 
     async def test_list_collections(self) -> None:
         """Agent: 'What document collections are available on GovInfo?'"""
-        from kaos_source.tools_govinfo import GovInfoCollectionsTool
+        from kaos_source.apis.govinfo.tools import GovInfoCollectionsTool
 
         tool = GovInfoCollectionsTool()
         result = await tool.execute({})
@@ -304,7 +304,7 @@ class TestGovInfoBattle:
 
     async def test_search_supreme_court(self) -> None:
         """Agent: 'Find Supreme Court decisions'"""
-        from kaos_source.tools_govinfo import GovInfoSearchTool
+        from kaos_source.apis.govinfo.tools import GovInfoSearchTool
 
         tool = GovInfoSearchTool()
         result = await tool.execute(
@@ -319,7 +319,7 @@ class TestGovInfoBattle:
 
     async def test_search_cfr_documents(self) -> None:
         """Agent: 'Search for Code of Federal Regulations documents about banking'"""
-        from kaos_source.tools_govinfo import GovInfoSearchTool
+        from kaos_source.apis.govinfo.tools import GovInfoSearchTool
 
         tool = GovInfoSearchTool()
         result = await tool.execute(
@@ -343,7 +343,7 @@ class TestEdgarBattle:
 
     async def test_lookup_apple_and_get_10k(self) -> None:
         """Agent: 'Find Apple's most recent 10-K filing'"""
-        from kaos_source.tools_edgar import EdgarCompanyTool, EdgarLookupTool
+        from kaos_source.apis.edgar.tools import EdgarCompanyTool, EdgarLookupTool
 
         # Step 1: Ticker → CIK
         lookup = EdgarLookupTool()
@@ -376,7 +376,7 @@ class TestEdgarBattle:
 
     async def test_search_climate_risk_disclosures(self) -> None:
         """Agent: 'Find 10-K filings mentioning climate risk'"""
-        from kaos_source.tools_edgar import EdgarSearchTool
+        from kaos_source.apis.edgar.tools import EdgarSearchTool
 
         tool = EdgarSearchTool()
         result = await tool.execute(
@@ -397,7 +397,7 @@ class TestEdgarBattle:
 
     async def test_lookup_multiple_tickers(self) -> None:
         """Agent: 'Get CIK numbers for MSFT, GOOGL, and NVDA'"""
-        from kaos_source.tools_edgar import EdgarLookupTool
+        from kaos_source.apis.edgar.tools import EdgarLookupTool
 
         tool = EdgarLookupTool()
         for ticker in ("MSFT", "GOOGL", "NVDA"):
@@ -408,7 +408,7 @@ class TestEdgarBattle:
 
     async def test_search_recent_8k_filings(self) -> None:
         """Agent: 'Find recent 8-K filings about mergers and acquisitions'"""
-        from kaos_source.tools_edgar import EdgarSearchTool
+        from kaos_source.apis.edgar.tools import EdgarSearchTool
 
         tool = EdgarSearchTool()
         result = await tool.execute(
@@ -424,7 +424,7 @@ class TestEdgarBattle:
 
     async def test_get_tesla_recent_filings(self) -> None:
         """Agent: 'What has Tesla filed recently?'"""
-        from kaos_source.tools_edgar import EdgarCompanyTool, EdgarLookupTool
+        from kaos_source.apis.edgar.tools import EdgarCompanyTool, EdgarLookupTool
 
         lookup = EdgarLookupTool()
         result = await lookup.execute({"ticker": "TSLA"})
@@ -521,7 +521,7 @@ class TestSourceBattle:
 
     async def test_discover_project_files(self) -> None:
         """Agent: 'List all Python files in the kaos-source package'"""
-        from kaos_source.tools import DiscoverSourcesTool
+        from kaos_source.runtime.tools import DiscoverSourcesTool
 
         tool = DiscoverSourcesTool()
         result = await tool.execute(
@@ -540,7 +540,7 @@ class TestSourceBattle:
 
     async def test_preview_file_content(self) -> None:
         """Agent: 'Show me the first 512 bytes of this file'"""
-        from kaos_source.tools import PreviewSourceTool
+        from kaos_source.runtime.tools import PreviewSourceTool
 
         tool = PreviewSourceTool()
         result = await tool.execute(
@@ -556,7 +556,7 @@ class TestSourceBattle:
 
     async def test_describe_file_metadata(self) -> None:
         """Agent: 'What type of file is this and how big is it?'"""
-        from kaos_source.tools import DescribeSourceTool
+        from kaos_source.runtime.tools import DescribeSourceTool
 
         tool = DescribeSourceTool()
         result = await tool.execute(

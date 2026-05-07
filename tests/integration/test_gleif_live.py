@@ -19,7 +19,7 @@ pytestmark = pytest.mark.integration
 
 
 def _build_gleif_tools() -> dict:
-    from kaos_source.tools_gleif import register_gleif_tools
+    from kaos_source.apis.gleif.tools import register_gleif_tools
 
     runtime = KaosRuntime()
     count = register_gleif_tools(runtime)

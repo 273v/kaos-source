@@ -8,15 +8,15 @@ from __future__ import annotations
 
 import pytest
 
+from kaos_source.apis.federal_register.tools import (
+    FRAgenciesTool,
+    FRGetDocumentTool,
+    FRSearchTool,
+)
 from kaos_source.connectors.federal_register import (
     get_agencies,
     get_document,
     search_documents,
-)
-from kaos_source.tools_federal_register import (
-    FRAgenciesTool,
-    FRGetDocumentTool,
-    FRSearchTool,
 )
 
 pytestmark = pytest.mark.integration

@@ -103,7 +103,7 @@ from kaos_source.registry import (
     default_parser_registry,
 )
 from kaos_source.runtime.service import SourceService
-from kaos_source.tools import register_source_tools
+from kaos_source.runtime.tools import register_source_tools
 from kaos_source.tools_forensics import register_forensics_tools
 from kaos_source.tools_pacer import register_pacer_tools
 from kaos_source.tools_vcard import register_vcard_tools

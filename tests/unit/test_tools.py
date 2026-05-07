@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from kaos_core import KaosContext, KaosRuntime
 
-from kaos_source.tools import (
+from kaos_source.runtime.tools import (
     DescribeSourceTool,
     DiscoverSourcesTool,
     FetchURLTool,

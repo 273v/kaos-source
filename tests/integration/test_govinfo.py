@@ -10,12 +10,12 @@ import os
 
 import pytest
 
-from kaos_source.connectors.govinfo import get_collections, get_package, search
-from kaos_source.tools_govinfo import (
+from kaos_source.apis.govinfo.tools import (
     GovInfoCollectionsTool,
     GovInfoGetPackageTool,
     GovInfoSearchTool,
 )
+from kaos_source.connectors.govinfo import get_collections, get_package, search
 
 pytestmark = [
     pytest.mark.integration,

@@ -37,7 +37,7 @@ def main(argv: list[str] | None = None) -> None:
         )
         sys.exit(1)
 
-    from kaos_source.tools import register_source_tools
+    from kaos_source.runtime.tools import register_source_tools
 
     # Create runtime and register all source + data retrieval tools
     runtime = KaosRuntime()
