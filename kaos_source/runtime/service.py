@@ -21,10 +21,6 @@ from uuid import uuid4
 from kaos_core import KaosContext
 
 from kaos_source.connectors import (
-    ArchiveConnector,
-    BrowserConnector,
-    FilesystemConnector,
-    HttpConnector,
     MemoryConnector,
     SourceConnector,
 )
@@ -65,16 +61,18 @@ class SourceService:
         self._job_tasks: dict[str, asyncio.Task[None]] = {}
         self._operation_semaphore = asyncio.Semaphore(max_concurrent_operations)
 
-        default_connectors = connectors
-        if default_connectors is None:
-            default_connectors = [
-                FilesystemConnector(),
-                ArchiveConnector(),
-                MemoryConnector(),
-                HttpConnector(),
-                BrowserConnector(),
-            ]
-        for connector in default_connectors:
+        if connectors is None:
+            # Pull from the global registry — auto-populated by
+            # :mod:`kaos_source.connectors` on import. The registry
+            # holds *classes*; we instantiate fresh per service so
+            # stateful connectors (MemoryConnector's put_bytes store,
+            # HttpConnector's per-domain semaphores) don't leak across
+            # services or test runs. Tests/scripts can still pass an
+            # explicit ``connectors=[...]`` list to override.
+            from kaos_source.registry import default_connector_registry
+
+            connectors = default_connector_registry.instantiate_all()
+        for connector in connectors:
             self.register_connector(connector)
 
     def register_connector(self, connector: SourceConnector) -> None:
