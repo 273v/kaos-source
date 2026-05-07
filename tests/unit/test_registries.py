@@ -194,9 +194,24 @@ class TestApiRegistry:
         reg.register("alpha", _OtherDemoApi)
         assert reg.list_names() == ["alpha", "zebra"]
 
-    def test_default_api_registry_starts_empty(self) -> None:
-        # Apis register themselves in chunk 5; chunk 4 leaves it empty.
-        assert len(default_api_registry) == 0
+    def test_default_api_registry_populated_after_chunk_5(self) -> None:
+        # Chunk 5 wired auto-registration in kaos_source/apis/__init__.py.
+        # Importing kaos_source (which we did at module load via test imports)
+        # transitively imports kaos_source.apis through the connector shims,
+        # populating all 5 builtin api connectors.
+        import kaos_source.apis  # noqa: F401  ensure chain-import has fired
+
+        for name in ("federal_register", "ecfr", "edgar", "govinfo", "gleif"):
+            assert name in default_api_registry, f"{name} should be registered"
+        # Each registered class is an ApiConnector subclass and exposes metadata.
+        from kaos_source.base.api_connector import ApiConnector
+
+        for name in default_api_registry.list_names():
+            cls = default_api_registry.get(name)
+            assert cls is not None
+            assert issubclass(cls, ApiConnector)
+            meta = cls.metadata()
+            assert meta.name == name
 
 
 class TestParserRegistry:

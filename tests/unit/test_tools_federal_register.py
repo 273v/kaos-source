@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from kaos_core import KaosRuntime
 
-from kaos_source.connectors.federal_register import FRAgency, FRDocument, FRSearchResult
+from kaos_source.apis.federal_register.models import FRAgency, FRDocument, FRSearchResult
 from kaos_source.tools_federal_register import (
     FRAgenciesTool,
     FRGetContentTool,
@@ -108,7 +108,7 @@ class TestAnnotations:
 
 
 class TestFRSearch:
-    @patch("kaos_source.connectors.federal_register.search_documents", new_callable=AsyncMock)
+    @patch("kaos_source.apis.federal_register.client.search_documents", new_callable=AsyncMock)
     async def test_basic_search(self, mock_search: AsyncMock) -> None:
         mock_search.return_value = _SAMPLE_SEARCH
         tool = FRSearchTool()
@@ -119,7 +119,7 @@ class TestFRSearch:
         assert len(result.structuredContent["results"]) == 1
         assert result.structuredContent["results"][0]["document_number"] == "2024-12345"
 
-    @patch("kaos_source.connectors.federal_register.search_documents", new_callable=AsyncMock)
+    @patch("kaos_source.apis.federal_register.client.search_documents", new_callable=AsyncMock)
     async def test_search_with_filters(self, mock_search: AsyncMock) -> None:
         mock_search.return_value = _SAMPLE_SEARCH
         tool = FRSearchTool()
@@ -138,7 +138,7 @@ class TestFRSearch:
         assert call_kwargs["doc_type"] == "RULE"
         assert call_kwargs["agencies"] == "cpsc"
 
-    @patch("kaos_source.connectors.federal_register.search_documents", new_callable=AsyncMock)
+    @patch("kaos_source.apis.federal_register.client.search_documents", new_callable=AsyncMock)
     async def test_search_pagination(self, mock_search: AsyncMock) -> None:
         result_with_more = FRSearchResult(
             documents=[_SAMPLE_DOC],
@@ -154,7 +154,7 @@ class TestFRSearch:
         assert result.structuredContent["has_more"] is True
         assert result.structuredContent["count"] == 100
 
-    @patch("kaos_source.connectors.federal_register.search_documents", new_callable=AsyncMock)
+    @patch("kaos_source.apis.federal_register.client.search_documents", new_callable=AsyncMock)
     async def test_search_error(self, mock_search: AsyncMock) -> None:
         mock_search.side_effect = RuntimeError("Connection timeout")
         tool = FRSearchTool()
@@ -162,7 +162,7 @@ class TestFRSearch:
         assert result.isError
         assert "Connection timeout" in (result.text or "")
 
-    @patch("kaos_source.connectors.federal_register.search_documents", new_callable=AsyncMock)
+    @patch("kaos_source.apis.federal_register.client.search_documents", new_callable=AsyncMock)
     async def test_empty_search(self, mock_search: AsyncMock) -> None:
         mock_search.return_value = FRSearchResult(documents=[], count=0, total_pages=0)
         tool = FRSearchTool()
@@ -178,7 +178,7 @@ class TestFRSearch:
 
 
 class TestFRGetDocument:
-    @patch("kaos_source.connectors.federal_register.get_document", new_callable=AsyncMock)
+    @patch("kaos_source.apis.federal_register.client.get_document", new_callable=AsyncMock)
     async def test_get_document(self, mock_get: AsyncMock) -> None:
         mock_get.return_value = _SAMPLE_DOC
         tool = FRGetDocumentTool()
@@ -193,7 +193,7 @@ class TestFRGetDocument:
         assert result.isError
         assert "kaos-source-fr-search" in (result.text or "")
 
-    @patch("kaos_source.connectors.federal_register.get_document", new_callable=AsyncMock)
+    @patch("kaos_source.apis.federal_register.client.get_document", new_callable=AsyncMock)
     async def test_document_not_found(self, mock_get: AsyncMock) -> None:
         mock_get.side_effect = RuntimeError("404 Not Found")
         tool = FRGetDocumentTool()
@@ -208,8 +208,10 @@ class TestFRGetDocument:
 
 
 class TestFRGetContent:
-    @patch("kaos_source.connectors.federal_register.fetch_document_content", new_callable=AsyncMock)
-    @patch("kaos_source.connectors.federal_register.get_document", new_callable=AsyncMock)
+    @patch(
+        "kaos_source.apis.federal_register.client.fetch_document_content", new_callable=AsyncMock
+    )
+    @patch("kaos_source.apis.federal_register.client.get_document", new_callable=AsyncMock)
     async def test_get_text_content(self, mock_get: AsyncMock, mock_fetch: AsyncMock) -> None:
         mock_get.return_value = _SAMPLE_DOC
         mock_fetch.return_value = "This is the full text of the regulation..."
@@ -219,8 +221,10 @@ class TestFRGetContent:
         assert result.structuredContent is not None
         assert "This is the full text" in result.structuredContent["content"]
 
-    @patch("kaos_source.connectors.federal_register.fetch_document_content", new_callable=AsyncMock)
-    @patch("kaos_source.connectors.federal_register.get_document", new_callable=AsyncMock)
+    @patch(
+        "kaos_source.apis.federal_register.client.fetch_document_content", new_callable=AsyncMock
+    )
+    @patch("kaos_source.apis.federal_register.client.get_document", new_callable=AsyncMock)
     async def test_get_html_content(self, mock_get: AsyncMock, mock_fetch: AsyncMock) -> None:
         mock_get.return_value = _SAMPLE_DOC
         mock_fetch.return_value = "<html><body>Regulation text</body></html>"
@@ -235,7 +239,7 @@ class TestFRGetContent:
         result = await tool.execute({"document_number": ""})
         assert result.isError
 
-    @patch("kaos_source.connectors.federal_register.get_document", new_callable=AsyncMock)
+    @patch("kaos_source.apis.federal_register.client.get_document", new_callable=AsyncMock)
     async def test_document_not_found(self, mock_get: AsyncMock) -> None:
         mock_get.side_effect = RuntimeError("404")
         tool = FRGetContentTool()
@@ -249,7 +253,7 @@ class TestFRGetContent:
 
 
 class TestFRAgencies:
-    @patch("kaos_source.connectors.federal_register.get_agencies", new_callable=AsyncMock)
+    @patch("kaos_source.apis.federal_register.client.get_agencies", new_callable=AsyncMock)
     async def test_list_agencies(self, mock_get: AsyncMock) -> None:
         mock_get.return_value = _SAMPLE_AGENCIES
         tool = FRAgenciesTool()
@@ -258,7 +262,7 @@ class TestFRAgencies:
         assert result.structuredContent is not None
         assert result.structuredContent["count"] == 3
 
-    @patch("kaos_source.connectors.federal_register.get_agencies", new_callable=AsyncMock)
+    @patch("kaos_source.apis.federal_register.client.get_agencies", new_callable=AsyncMock)
     async def test_filter_agencies(self, mock_get: AsyncMock) -> None:
         mock_get.return_value = _SAMPLE_AGENCIES
         tool = FRAgenciesTool()
@@ -268,7 +272,7 @@ class TestFRAgencies:
         assert result.structuredContent["count"] == 1
         assert result.structuredContent["agencies"][0]["slug"] == "environmental-protection-agency"
 
-    @patch("kaos_source.connectors.federal_register.get_agencies", new_callable=AsyncMock)
+    @patch("kaos_source.apis.federal_register.client.get_agencies", new_callable=AsyncMock)
     async def test_agencies_error(self, mock_get: AsyncMock) -> None:
         mock_get.side_effect = RuntimeError("API unavailable")
         tool = FRAgenciesTool()
@@ -286,7 +290,7 @@ class TestErrorMessages:
     async def test_search_error_has_guidance(self) -> None:
         tool = FRSearchTool()
         with patch(
-            "kaos_source.connectors.federal_register.search_documents",
+            "kaos_source.apis.federal_register.client.search_documents",
             new_callable=AsyncMock,
             side_effect=RuntimeError("timeout"),
         ):

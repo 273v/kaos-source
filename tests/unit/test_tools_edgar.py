@@ -69,7 +69,7 @@ class TestAnnotations:
 
 
 class TestEdgarSearch:
-    @patch("kaos_source.connectors.edgar.search_filings", new_callable=AsyncMock)
+    @patch("kaos_source.apis.edgar.client.search_filings", new_callable=AsyncMock)
     async def test_search_by_query(self, mock_search: AsyncMock) -> None:
         mock_search.return_value = _SAMPLE_SEARCH
         tool = EdgarSearchTool()
@@ -86,7 +86,7 @@ class TestEdgarSearch:
 
 
 class TestEdgarCompany:
-    @patch("kaos_source.connectors.edgar.get_company", new_callable=AsyncMock)
+    @patch("kaos_source.apis.edgar.client.get_company", new_callable=AsyncMock)
     async def test_get_company(self, mock_get: AsyncMock) -> None:
         mock_get.return_value = _SAMPLE_COMPANY
         tool = EdgarCompanyTool()
@@ -103,7 +103,7 @@ class TestEdgarCompany:
 
 
 class TestEdgarLookup:
-    @patch("kaos_source.connectors.edgar.lookup_ticker", new_callable=AsyncMock)
+    @patch("kaos_source.apis.edgar.client.lookup_ticker", new_callable=AsyncMock)
     async def test_lookup_found(self, mock_lookup: AsyncMock) -> None:
         mock_lookup.return_value = {"cik": "0000320193", "ticker": "AAPL", "title": "Apple Inc."}
         tool = EdgarLookupTool()
@@ -112,7 +112,7 @@ class TestEdgarLookup:
         assert result.structuredContent is not None
         assert result.structuredContent["cik"] == "0000320193"
 
-    @patch("kaos_source.connectors.edgar.lookup_ticker", new_callable=AsyncMock)
+    @patch("kaos_source.apis.edgar.client.lookup_ticker", new_callable=AsyncMock)
     async def test_lookup_not_found(self, mock_lookup: AsyncMock) -> None:
         mock_lookup.return_value = None
         tool = EdgarLookupTool()

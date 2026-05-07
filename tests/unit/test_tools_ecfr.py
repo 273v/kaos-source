@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from kaos_core import KaosRuntime
 
-from kaos_source.connectors.ecfr import ECFRStructureNode, ECFRTitle, get_latest_date
+from kaos_source.apis.ecfr.client import get_latest_date
+from kaos_source.apis.ecfr.models import ECFRStructureNode, ECFRTitle
 from kaos_source.tools_ecfr import (
     ECFRContentTool,
     ECFRListTitlesTool,
@@ -106,7 +107,7 @@ class TestAnnotations:
 
 
 class TestListTitles:
-    @patch("kaos_source.connectors.ecfr.get_titles", new_callable=AsyncMock)
+    @patch("kaos_source.apis.ecfr.client.get_titles", new_callable=AsyncMock)
     async def test_list_titles(self, mock_get: AsyncMock) -> None:
         mock_get.return_value = _SAMPLE_TITLES
         tool = ECFRListTitlesTool()
@@ -117,7 +118,7 @@ class TestListTitles:
         numbers = [t["number"] for t in result.structuredContent["titles"]]
         assert 40 in numbers
 
-    @patch("kaos_source.connectors.ecfr.get_titles", new_callable=AsyncMock)
+    @patch("kaos_source.apis.ecfr.client.get_titles", new_callable=AsyncMock)
     async def test_titles_error(self, mock_get: AsyncMock) -> None:
         mock_get.side_effect = RuntimeError("API down")
         tool = ECFRListTitlesTool()
@@ -127,7 +128,7 @@ class TestListTitles:
 
 
 class TestLatestDateFallback:
-    @patch("kaos_source.connectors.ecfr.get_titles", new_callable=AsyncMock)
+    @patch("kaos_source.apis.ecfr.client.get_titles", new_callable=AsyncMock)
     async def test_returns_none_when_titles_lookup_fails(self, mock_get: AsyncMock) -> None:
         mock_get.side_effect = RuntimeError("API down")
 
@@ -135,7 +136,7 @@ class TestLatestDateFallback:
 
         assert value is None
 
-    @patch("kaos_source.connectors.ecfr.get_titles", new_callable=AsyncMock)
+    @patch("kaos_source.apis.ecfr.client.get_titles", new_callable=AsyncMock)
     async def test_returns_none_when_title_has_no_latest_issue_date(
         self, mock_get: AsyncMock
     ) -> None:
@@ -145,7 +146,7 @@ class TestLatestDateFallback:
 
         assert value is None
 
-    @patch("kaos_source.connectors.ecfr.get_titles", new_callable=AsyncMock)
+    @patch("kaos_source.apis.ecfr.client.get_titles", new_callable=AsyncMock)
     async def test_returns_date_when_available(self, mock_get: AsyncMock) -> None:
         mock_get.return_value = [
             ECFRTitle(number=40, name="Protection", latest_issue_date="2026-03-15")
@@ -162,7 +163,7 @@ class TestLatestDateFallback:
 
 
 class TestStructure:
-    @patch("kaos_source.connectors.ecfr.get_title_structure", new_callable=AsyncMock)
+    @patch("kaos_source.apis.ecfr.client.get_title_structure", new_callable=AsyncMock)
     async def test_get_structure(self, mock_get: AsyncMock) -> None:
         mock_get.return_value = _SAMPLE_STRUCTURE
         tool = ECFRStructureTool()
@@ -172,7 +173,7 @@ class TestStructure:
         assert result.structuredContent["part_count"] == 2
         assert result.structuredContent["section_count"] == 2
 
-    @patch("kaos_source.connectors.ecfr.get_title_structure", new_callable=AsyncMock)
+    @patch("kaos_source.apis.ecfr.client.get_title_structure", new_callable=AsyncMock)
     async def test_structure_with_depth(self, mock_get: AsyncMock) -> None:
         mock_get.return_value = _SAMPLE_STRUCTURE
         tool = ECFRStructureTool()
@@ -184,7 +185,7 @@ class TestStructure:
         part = tree["children"][0]
         assert "child_count" in part or "children" not in part
 
-    @patch("kaos_source.connectors.ecfr.get_title_structure", new_callable=AsyncMock)
+    @patch("kaos_source.apis.ecfr.client.get_title_structure", new_callable=AsyncMock)
     async def test_structure_error(self, mock_get: AsyncMock) -> None:
         mock_get.side_effect = RuntimeError("Not found")
         tool = ECFRStructureTool()
@@ -199,7 +200,7 @@ class TestStructure:
 
 
 class TestContent:
-    @patch("kaos_source.connectors.ecfr.get_section_content", new_callable=AsyncMock)
+    @patch("kaos_source.apis.ecfr.client.get_section_content", new_callable=AsyncMock)
     async def test_get_section_content(self, mock_get: AsyncMock) -> None:
         mock_get.return_value = "<div>Section content here</div>"
         tool = ECFRContentTool()
@@ -208,7 +209,7 @@ class TestContent:
         assert result.structuredContent is not None
         assert "Section content here" in result.structuredContent["content"]
 
-    @patch("kaos_source.connectors.ecfr.get_section_content", new_callable=AsyncMock)
+    @patch("kaos_source.apis.ecfr.client.get_section_content", new_callable=AsyncMock)
     async def test_get_part_content(self, mock_get: AsyncMock) -> None:
         mock_get.return_value = "<div>Part 82 full text</div>"
         tool = ECFRContentTool()
@@ -221,7 +222,7 @@ class TestContent:
         assert result.isError
         assert "kaos-source-ecfr-structure" in (result.text or "")
 
-    @patch("kaos_source.connectors.ecfr.get_section_content", new_callable=AsyncMock)
+    @patch("kaos_source.apis.ecfr.client.get_section_content", new_callable=AsyncMock)
     async def test_content_xml_format(self, mock_get: AsyncMock) -> None:
         mock_get.return_value = "<CFR><section>XML content</section></CFR>"
         tool = ECFRContentTool()
@@ -237,7 +238,7 @@ class TestContent:
 
 
 class TestSearch:
-    @patch("kaos_source.connectors.ecfr.get_title_structure", new_callable=AsyncMock)
+    @patch("kaos_source.apis.ecfr.client.get_title_structure", new_callable=AsyncMock)
     async def test_search_sections(self, mock_get: AsyncMock) -> None:
         mock_get.return_value = _SAMPLE_STRUCTURE
         tool = ECFRSearchTool()
@@ -249,7 +250,7 @@ class TestSearch:
         labels = [r["label"] for r in result.structuredContent["results"]]
         assert any("ozone" in label.lower() for label in labels)
 
-    @patch("kaos_source.connectors.ecfr.get_title_structure", new_callable=AsyncMock)
+    @patch("kaos_source.apis.ecfr.client.get_title_structure", new_callable=AsyncMock)
     async def test_search_no_results(self, mock_get: AsyncMock) -> None:
         mock_get.return_value = _SAMPLE_STRUCTURE
         tool = ECFRSearchTool()
@@ -276,7 +277,7 @@ class TestErrorMessages:
         assert result.isError
         assert "kaos-source-ecfr-structure" in (result.text or "")
 
-    @patch("kaos_source.connectors.ecfr.get_title_structure", new_callable=AsyncMock)
+    @patch("kaos_source.apis.ecfr.client.get_title_structure", new_callable=AsyncMock)
     async def test_structure_error_suggests_titles(self, mock_get: AsyncMock) -> None:
         mock_get.side_effect = RuntimeError("Not found")
         tool = ECFRStructureTool()

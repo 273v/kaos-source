@@ -105,7 +105,7 @@ class TestAnnotations:
 
 
 class TestSearch:
-    @patch("kaos_source.connectors.govinfo.search", new_callable=AsyncMock)
+    @patch("kaos_source.apis.govinfo.client.search", new_callable=AsyncMock)
     async def test_basic_search(self, mock_search: AsyncMock) -> None:
         mock_search.return_value = _SAMPLE_SEARCH
         tool = GovInfoSearchTool()
@@ -114,7 +114,7 @@ class TestSearch:
         assert result.structuredContent is not None
         assert result.structuredContent["count"] == 1
 
-    @patch("kaos_source.connectors.govinfo.search", new_callable=AsyncMock)
+    @patch("kaos_source.apis.govinfo.client.search", new_callable=AsyncMock)
     async def test_search_with_collection(self, mock_search: AsyncMock) -> None:
         mock_search.return_value = _SAMPLE_SEARCH
         tool = GovInfoSearchTool()
@@ -129,7 +129,7 @@ class TestSearch:
         result = await tool.execute({"query": ""})
         assert result.isError
 
-    @patch("kaos_source.connectors.govinfo.search", new_callable=AsyncMock)
+    @patch("kaos_source.apis.govinfo.client.search", new_callable=AsyncMock)
     async def test_search_api_key_error(self, mock_search: AsyncMock) -> None:
         mock_search.side_effect = ValueError("API key not set")
         tool = GovInfoSearchTool()
@@ -144,7 +144,7 @@ class TestSearch:
 
 
 class TestGetPackage:
-    @patch("kaos_source.connectors.govinfo.get_package", new_callable=AsyncMock)
+    @patch("kaos_source.apis.govinfo.client.get_package", new_callable=AsyncMock)
     async def test_get_package(self, mock_get: AsyncMock) -> None:
         mock_get.return_value = _SAMPLE_PACKAGE
         tool = GovInfoGetPackageTool()
@@ -166,7 +166,7 @@ class TestGetPackage:
 
 
 class TestCollections:
-    @patch("kaos_source.connectors.govinfo.get_collections", new_callable=AsyncMock)
+    @patch("kaos_source.apis.govinfo.client.get_collections", new_callable=AsyncMock)
     async def test_list_collections(self, mock_get: AsyncMock) -> None:
         mock_get.return_value = _SAMPLE_COLLECTIONS
         tool = GovInfoCollectionsTool()
@@ -177,7 +177,7 @@ class TestCollections:
         codes = [c["code"] for c in result.structuredContent["collections"]]
         assert "FR" in codes
 
-    @patch("kaos_source.connectors.govinfo.get_collections", new_callable=AsyncMock)
+    @patch("kaos_source.apis.govinfo.client.get_collections", new_callable=AsyncMock)
     async def test_collections_api_error(self, mock_get: AsyncMock) -> None:
         mock_get.side_effect = ValueError("API key not set")
         tool = GovInfoCollectionsTool()
