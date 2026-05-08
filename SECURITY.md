@@ -42,13 +42,52 @@ minor releases will be supported.
 
 ## Scope
 
+`kaos-source` provides source discovery, retrieval, and parsing for
+KAOS. It exposes:
+
+- **`SourceConnector` transports**: filesystem, archive, http, browser,
+  memory.
+- **`ApiConnector` REST clients**: federal_register, ecfr, edgar,
+  govinfo, gleif. The govinfo client reads `KAOS_SOURCE_GOVINFO_API_KEY`
+  or `GOVINFO_API_KEY` from the environment; agent runners (e.g. via
+  `kaos-mcp`'s setup helpers) supply the value through env-var
+  references rather than persisting the literal secret.
+- **`SourceParser` implementations**: vcard, email (`eml`, `mbox`,
+  family), pacer, file metadata, image metadata.
+- **MCP tool registrations**: `register_ecfr_tools`,
+  `register_edgar_tools`, `register_federal_register_tools`,
+  `register_gleif_tools`, `register_govinfo_tools`.
+
 In-scope:
 
 - The `kaos-source` Python package as published on PyPI
 - The `273v/kaos-source` GitHub repository (CI, release, supply chain)
+- Connector input handling — URL allowlists, archive extraction
+  (zip-bomb / path-traversal protection), browser navigation safety
+- API client hardening — request signing, rate limiting, response
+  validation, redaction of API keys from log output
+- Parser input handling — malformed eml / mbox / vcard, deeply nested
+  MIME trees, oversize attachments, binary-checksum integrity
+- Tool boundary (`register_*_tools` outputs) — input validation,
+  response shaping, tool annotation correctness
+  (`readOnlyHint`, `idempotentHint`)
+- File metadata checksums — SHA-256 / BLAKE2b are the integrity-bearing
+  digests; MD5 is computed only with `usedforsecurity=False` for
+  eDiscovery tool compat
+- OIDC trusted-publishing release pipeline
 
 Out of scope:
 
-- Third-party dependencies (report to the upstream project)
-- Issues caused by user-supplied configuration that explicitly disables safety
-  features (e.g., `verify_ssl=False`)
+- Vulnerabilities in third-party dependencies — report upstream
+  (`httpx`, `lxml`, `pydantic`, `kaos-core`, `kaos-content`,
+  `kaos-nlp-core`).
+- Provider-side issues at the upstream API endpoints (Federal Register,
+  eCFR, EDGAR, govinfo.gov, GLEIF) — report to the operator of each
+  service.
+- MCP transport security — that surface lives in `kaos-mcp`; report
+  there.
+- Browser-driver vulnerabilities (Playwright / Chromium) — report
+  upstream.
+- Issues caused by user-supplied configuration that explicitly disables
+  safety features (e.g. `verify_ssl=False`, lifting connector
+  allowlists, bypassing rate limits).

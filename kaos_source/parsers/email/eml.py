@@ -298,11 +298,13 @@ def _extract_attachments(msg: EmailMessage) -> list[Attachment]:
             content_id = content_id.strip("<>")
 
         # Get content for size + hashes. KSRC-08: SHA-256 is authoritative;
-        # MD5 retained for eDiscovery tool compat.
+        # MD5 retained for eDiscovery tool compat (not a security claim —
+        # ``usedforsecurity=False`` documents that and keeps Bandit B324
+        # quiet).
         payload = part.get_payload(decode=True)
         if isinstance(payload, bytes):
             size: int | None = len(payload)
-            md5: str | None = hashlib.md5(payload).hexdigest()
+            md5: str | None = hashlib.md5(payload, usedforsecurity=False).hexdigest()
             sha256: str | None = hashlib.sha256(payload).hexdigest()
         else:
             size = None
