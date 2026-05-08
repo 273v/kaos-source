@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0a2] — 2026-05-08
+
+CI supply-chain hardening (audit-02 F7) and SECURITY.md scope rewrite
+(audit-02 F8). Two MD5 call sites tagged `usedforsecurity=False` to
+document that they exist for eDiscovery tool compat, not as a security
+claim. No public API changes.
+
+### Security
+
+- **F7: CI supply-chain hardening.** `.github/workflows/security.yml`
+  pins the gitleaks Docker image to `v8.21.2` (no longer tracking
+  `:latest`), adds a Bandit static-analysis job (medium severity /
+  medium confidence; `B101,B404,B603,B607` skipped — pytest assertions,
+  subprocess use, and known-safe partial-path invocations are
+  intentional), and runs the integration suite on `schedule` and
+  `workflow_dispatch` so cross-package regressions surface against
+  `main` even though the unit gate stays the PR fast path.
+- **MD5 calls now opt out of the security claim.**
+  `kaos_source.parsers.email.eml._build_attachments` and
+  `kaos_source.parsers.metadata.file.parse_file_metadata` both compute
+  MD5 alongside SHA-256 / BLAKE2b for eDiscovery tool compatibility —
+  not for integrity. They now pass `usedforsecurity=False` to
+  `hashlib.md5(...)` so the intent is explicit at the call site and
+  Bandit's `B324` warning stays silent under the new gate.
+
+### Changed
+
+- **F8: `SECURITY.md` scope rewritten.** The previous file was a
+  two-line placeholder that listed only the package and repo as
+  in-scope. The new file describes the actual surface — connector
+  transports (filesystem / archive / http / browser / memory), API
+  clients (federal_register / ecfr / edgar / govinfo / gleif), parsers
+  (eml / mbox / vcard / pacer / file_meta / image_meta), the
+  `register_*_tools` MCP tool registrations, and the integrity-bearing
+  checksum policy. Out-of-scope correctly lists the upstream API
+  operators, third-party dependencies, browser-driver
+  vulnerabilities, and configuration-disabled safety features.
+
 ## [0.1.0a1] — 2026-05-07
 
 First public alpha release.

@@ -123,7 +123,10 @@ def extract_file_metadata(
     if compute_checksums:
         hashers: dict[str, hashlib._Hash] = {}
         if "md5" in checksum_algorithms:
-            hashers["md5"] = hashlib.md5()
+            # MD5 is offered for eDiscovery tool compat only (SHA-256 +
+            # BLAKE2b are the integrity-bearing checksums). ``usedforsecurity=False``
+            # documents the intent and keeps Bandit B324 quiet.
+            hashers["md5"] = hashlib.md5(usedforsecurity=False)
         if "sha256" in checksum_algorithms:
             hashers["sha256"] = hashlib.sha256()
         if "blake2b" in checksum_algorithms:
