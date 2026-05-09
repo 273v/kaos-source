@@ -2,6 +2,9 @@
 
 <!-- One-paragraph description of what this PR does and why it's needed. -->
 
+See [CONTRIBUTING.md](https://github.com/273v/kaos-source/blob/main/CONTRIBUTING.md)
+for setup, quality gates, and engineering standards.
+
 ## Type of change
 
 - [ ] Bug fix (non-breaking change which fixes an issue)
@@ -13,10 +16,11 @@
 
 - [ ] Commits are signed off (`git commit -s`) — DCO required
 - [ ] Tests added/updated for any behavior change
-- [ ] `uv run ruff format --check kaos_core tests` passes
-- [ ] `uv run ruff check kaos_core tests` passes
-- [ ] `uv run ty check kaos_core tests` passes
-- [ ] `uv run pytest -m "not live and not network and not slow"` passes
+- [ ] `uv run ruff format --check kaos_source tests` passes
+- [ ] `uv run ruff check kaos_source tests` passes
+- [ ] `uv run ty check kaos_source tests` passes
+- [ ] `uv run pytest tests/unit --no-cov` passes
+- [ ] Public API, CLI behavior, package metadata, fixtures, and release impact considered
 - [ ] `CHANGELOG.md` updated under `[Unreleased]` if user-visible
 
 ## Related issues
