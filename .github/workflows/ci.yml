@@ -129,15 +129,20 @@ jobs:
         # and never run the source-build path; this step is effectively
         # a no-op there.
         #
-        # 3.15 (pre-release) currently has no published wheel for
-        # ``lxml`` (used by [http] + parser tests transitively), so uv
-        # falls back to source-building it. ``lxml``'s setup.py
-        # imports libxml2/libxslt headers and fails immediately when
-        # the system dev packages are missing.
+        # 3.15 (pre-release) currently has no published wheels for:
+        # - ``lxml`` (transitive via [http] / parser tests): needs
+        #   libxml2 + libxslt headers.
+        # - ``pillow`` (transitive via image / EXIF / VCard photo
+        #   handling): refuses to build without libjpeg + zlib and
+        #   the rest of the codec set.
+        # Mirrors the kaos-content / kaos-ml-core apt-get list.
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxml2-dev libxslt-dev
+          sudo apt-get install -y \
+            libxml2-dev libxslt-dev \
+            libjpeg-dev zlib1g-dev libtiff-dev libfreetype6-dev \
+            liblcms2-dev libwebp-dev libopenjp2-7-dev libimagequant-dev
 
       - name: Install dependencies
         # `shell: bash` for `\` continuations on Windows (matches the

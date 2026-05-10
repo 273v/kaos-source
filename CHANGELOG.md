@@ -36,11 +36,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   POSIX. Regression coverage:
   ``tests/unit/test_hardening.py::TestRootsPolicy.test_root_path_resolves_local_file_uri``
   + ``test_root_path_round_trip_via_assert``.
-- **CI: Python 3.15 ``lxml`` source-build failed for missing
-  libxml2/libxslt headers.** No published lxml wheel exists for
-  3.15 (pre-release), so uv falls back to source-build. Added an
-  ``apt-get install libxml2-dev libxslt-dev`` step gated on
-  ``runner.os == 'Linux'``, plus ``shell: bash`` on the Install
+- **CI: Python 3.15 source-build chain for ``lxml`` + ``pillow``.**
+  No published lxml or pillow wheel exists for 3.15 (pre-release)
+  yet, so uv falls back to source-build. Added the standard
+  apt-get list (``libxml2-dev libxslt-dev libjpeg-dev zlib1g-dev
+  libtiff-dev libfreetype6-dev liblcms2-dev libwebp-dev
+  libopenjp2-7-dev libimagequant-dev``) gated on
+  ``runner.os == 'Linux'``, mirroring the kaos-content +
+  kaos-ml-core workflows. Also added ``shell: bash`` on the Install
   dependencies step (it already existed on Run tests).
 
 ## [0.1.0a2] — 2026-05-08
