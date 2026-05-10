@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Federal Register client preserves multi-value query params.**
+  `kaos_source.apis._http.fetch_json` was called with
+  `params=dict(list_of_tuples)` from `apis/federal_register/client.py`
+  inside `search_documents` and `get_document`. Calling `dict()` on the
+  list of `(key, value)` tuples kept only the LAST value per duplicate
+  key, so the FR client's `fields[]`, `conditions[agencies][]`, and
+  `conditions[type][]` keys all collapsed to a single value. Search
+  responses came back with only `json_url` per result; agents that
+  called `kaos-source-fr-search` saw "Found N documents" but no
+  document_number / title / publication_date / abstract / citation.
+  Affected callers had to round-trip every result through
+  `get_document()`, burning ~15× the tokens and ~14× the cost. Pass
+  the `list[tuple]` through to httpx (which natively accepts both
+  forms) and broaden the type hints on `fetch_json` / `fetch_text` to
+  match.
+
 ## [0.1.0a2] — 2026-05-08
 
 CI supply-chain hardening (audit-02 F7) and SECURITY.md scope rewrite
