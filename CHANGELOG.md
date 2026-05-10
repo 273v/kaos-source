@@ -24,6 +24,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `list[tuple]` through to httpx (which natively accepts both
   forms) and broaden the type hints on `fetch_json` / `fetch_text` to
   match.
+- **Roots policy: Windows `file:///C:/...` URIs were rejected.**
+  ``_root_path`` parsed root URIs via ``urlparse`` then wrapped
+  ``parsed.path`` in ``Path(...)``. On Windows that path comes back
+  as ``/C:/Users/...``, which ``Path`` interprets as a drive-relative
+  ``\C:\Users\...`` and never matches the resolved target.
+  Result: every Windows-x64 CI run that exercised the roots policy
+  fell into the deny branch (``SourcePolicyError: Source access
+  denied by roots policy``). Switched to ``Path.from_uri`` (Python
+  3.13+) on Windows, kept the explicit ``urlparse + unquote`` path on
+  POSIX. Regression coverage:
+  ``tests/unit/test_hardening.py::TestRootsPolicy.test_root_path_resolves_local_file_uri``
+  + ``test_root_path_round_trip_via_assert``.
+- **CI: Python 3.15 ``lxml`` source-build failed for missing
+  libxml2/libxslt headers.** No published lxml wheel exists for
+  3.15 (pre-release), so uv falls back to source-build. Added an
+  ``apt-get install libxml2-dev libxslt-dev`` step gated on
+  ``runner.os == 'Linux'``, plus ``shell: bash`` on the Install
+  dependencies step (it already existed on Run tests).
 
 ## [0.1.0a2] — 2026-05-08
 

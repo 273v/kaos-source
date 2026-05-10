@@ -124,7 +124,25 @@ jobs:
       - name: Install Python ${{ matrix.python-version }}
         run: uv python install --preview ${{ matrix.python-version }}
 
+      - name: Install system libraries for source-built C extensions
+        # Linux-only. The 3.13 / 3.14 stable lanes hit cached wheels
+        # and never run the source-build path; this step is effectively
+        # a no-op there.
+        #
+        # 3.15 (pre-release) currently has no published wheel for
+        # ``lxml`` (used by [http] + parser tests transitively), so uv
+        # falls back to source-building it. ``lxml``'s setup.py
+        # imports libxml2/libxslt headers and fails immediately when
+        # the system dev packages are missing.
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxml2-dev libxslt-dev
+
       - name: Install dependencies
+        # `shell: bash` for `\` continuations on Windows (matches the
+        # Run tests step below).
+        shell: bash
         run: uv sync --group dev --python ${{ matrix.python-version }}
 
       - name: Run tests with coverage
