@@ -137,6 +137,14 @@ jobs:
     name: integration tests
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # Integration tests spin up local HTTP/MCP servers on 127.0.0.1.
+    # kaos-core 0.1.0a5's KaosSecuritySettings defaults to
+    # block_loopback=True (strict-by-default SSRF), which rejects the
+    # tests' own localhost target with SourcePolicyError and cascades
+    # to ConnectError + BrokenPipeError on the MCP-over-stdio tests.
+    # Disable loopback blocking for this scheduled job only.
+    env:
+      KAOS_SECURITY_BLOCK_LOOPBACK: "false"
     steps:
       - name: Checkout
         uses: actions/checkout@v6
