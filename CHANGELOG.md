@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **CI: nightly integration tests now allow loopback for local
+  fixtures.** kaos-core 0.1.0a5's strict-by-default SSRF guard
+  (``KaosSecuritySettings.block_loopback=True``) rejected the tests'
+  own ``127.0.0.1`` test server with ``SourcePolicyError``,
+  cascading to ``httpx.ConnectError`` + ``BrokenPipeError`` on the
+  MCP-over-stdio legs. Set ``KAOS_SECURITY_BLOCK_LOOPBACK=false`` on
+  the scheduled-only ``integration`` job in ``security.yml`` so the
+  local fixture HTTP server is reachable. Push/PR runs of
+  ``security.yml`` are unchanged (the job has ``if: github.event_name
+  == 'schedule' || github.event_name == 'workflow_dispatch'``). No
+  runtime behavior change.
+
+
 ## [0.1.0a3] — 2026-05-11
 
 ### Fixed
