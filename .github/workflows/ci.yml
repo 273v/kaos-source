@@ -124,7 +124,30 @@ jobs:
       - name: Install Python ${{ matrix.python-version }}
         run: uv python install --preview ${{ matrix.python-version }}
 
+      - name: Install system libraries for source-built C extensions
+        # Linux-only. The 3.13 / 3.14 stable lanes hit cached wheels
+        # and never run the source-build path; this step is effectively
+        # a no-op there.
+        #
+        # 3.15 (pre-release) currently has no published wheels for:
+        # - ``lxml`` (transitive via [http] / parser tests): needs
+        #   libxml2 + libxslt headers.
+        # - ``pillow`` (transitive via image / EXIF / VCard photo
+        #   handling): refuses to build without libjpeg + zlib and
+        #   the rest of the codec set.
+        # Mirrors the kaos-content / kaos-ml-core apt-get list.
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxml2-dev libxslt-dev \
+            libjpeg-dev zlib1g-dev libtiff-dev libfreetype6-dev \
+            liblcms2-dev libwebp-dev libopenjp2-7-dev libimagequant-dev
+
       - name: Install dependencies
+        # `shell: bash` for `\` continuations on Windows (matches the
+        # Run tests step below).
+        shell: bash
         run: uv sync --group dev --python ${{ matrix.python-version }}
 
       - name: Run tests with coverage

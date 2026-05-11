@@ -283,6 +283,34 @@ class TestRootsPolicy:
         roots = [Root(uri="https://example.com/", name="all")]
         assert_roots_allow_uri("https://example.com/any/path", roots, schemes={"https"})
 
+    def test_root_path_resolves_local_file_uri(self, tmp_path: Path) -> None:
+        """`_root_path` resolves a local `file://` URI back to the same path.
+
+        Regression for the Windows-x64 CI leg: ``file:///C:/Users/...``
+        parsed via the POSIX-only ``urlparse + Path(parsed.path)`` path
+        produced ``\\C:\\Users\\...`` (drive-relative) instead of
+        ``C:\\Users\\...``, so resolved root never matched the resolved
+        target and ``assert_roots_allow_path`` rejected every tmp path.
+        """
+        from kaos_source.runtime.policy import _root_path
+
+        target = tmp_path.resolve()
+        root = Root(uri=target.as_uri(), name="t")
+        assert _root_path(root) == target
+
+    def test_root_path_round_trip_via_assert(self, tmp_path: Path) -> None:
+        """End-to-end: a Root built from `tmp_path.as_uri()` must
+        accept that same `tmp_path` under `assert_roots_allow_path`.
+
+        On Windows this previously raised SourcePolicyError because
+        ``_root_path`` mishandled the ``file:///C:/...`` form.
+        """
+        from kaos_source.connectors.base import assert_roots_allow_path
+
+        roots = [Root(uri=tmp_path.resolve().as_uri(), name="tmp")]
+        # Should not raise.
+        assert_roots_allow_path(tmp_path.resolve(), roots)
+
 
 # ---------------------------------------------------------------------------
 # models.py

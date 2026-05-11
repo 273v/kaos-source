@@ -18,6 +18,7 @@ Plus :func:`path_matches_patterns` for fnmatch-style filtering used by
 
 from __future__ import annotations
 
+import os
 from fnmatch import fnmatch
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlparse, urlsplit
@@ -46,10 +47,29 @@ def path_matches_patterns(path: str, patterns: list[str]) -> bool:
 
 
 def _root_path(root: Root) -> Path | None:
-    """Resolve a ``file://`` root URI to an absolute Path. Non-file roots → None."""
+    """Resolve a ``file://`` root URI to an absolute Path. Non-file roots → None.
+
+    Windows note: ``file:///C:/Users/...`` parses to ``parsed.path =
+    "/C:/Users/..."``. Naively wrapping that in ``Path(...)`` lands at
+    ``\\C:\\Users\\...`` which won't compare equal to a resolved
+    ``C:\\Users\\...`` and breaks the roots policy.
+    ``Path.from_uri`` (Python 3.13+) handles the drive-letter prefix
+    correctly on every OS, so we use it on Windows. On POSIX we keep
+    the explicit ``urlparse + unquote`` path because it has always
+    worked and ``Path.from_uri`` raises on roots like ``file:///``
+    with empty paths.
+    """
     parsed = urlparse(root.uri)
     if parsed.scheme != "file":
         return None
+    if os.name == "nt":
+        try:
+            return Path.from_uri(root.uri).resolve()
+        except (ValueError, AttributeError):
+            # ``Path.from_uri`` is 3.13+. On the rare unsupported
+            # interpreter (and on malformed URIs) fall back to the
+            # POSIX path below.
+            pass
     return Path(unquote(parsed.path or "/")).resolve()
 
 
