@@ -5,7 +5,8 @@ All notable changes to `kaos-source` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+
+## [0.1.0a3] — 2026-05-11
 
 ### Fixed
 
@@ -207,5 +208,6 @@ First public alpha release.
   The `Attachment.sha256` field is the new authoritative integrity
   hash; `Attachment.md5` is documented as legacy.
 
-[Unreleased]: https://github.com/273v/kaos-source/compare/v0.1.0a1...HEAD
+[Unreleased]: https://github.com/273v/kaos-source/compare/v0.1.0a3...HEAD
+[0.1.0a3]: https://github.com/273v/kaos-source/compare/v0.1.0a2...v0.1.0a3
 [0.1.0a1]: https://github.com/273v/kaos-source/releases/tag/v0.1.0a1
