@@ -239,7 +239,12 @@ async def search_documents(
         headers=_api_headers(s),
     ) as client:
         # KSRC-02 + KSRC-07.
-        data = await fetch_json(client, url, api="FederalRegister", params=dict(params))
+        # NOTE: params is list[tuple] not dict — duplicate keys (fields[],
+        # conditions[agencies][], conditions[type][]) must be preserved.
+        # dict(params) silently dropped all but the last entry per key,
+        # which made search responses contain only `json_url` and forced
+        # callers to round-trip every doc through get_document().
+        data = await fetch_json(client, url, api="FederalRegister", params=params)
 
     documents = [_parse_document(d) for d in data.get("results", [])]
     return FRSearchResult(
@@ -276,8 +281,9 @@ async def get_document(
         timeout=s.timeout,
         headers=_api_headers(s),
     ) as client:
-        # KSRC-02 + KSRC-07.
-        data = await fetch_json(client, url, api="FederalRegister", params=dict(params))
+        # KSRC-02 + KSRC-07. Pass list[tuple] directly — duplicate
+        # `fields[]` keys must survive (see search_documents above).
+        data = await fetch_json(client, url, api="FederalRegister", params=params)
 
     return _parse_document(data)
 

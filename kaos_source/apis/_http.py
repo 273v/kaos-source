@@ -78,7 +78,7 @@ async def fetch_json(
     *,
     api: str,
     method: str = "GET",
-    params: dict[str, Any] | None = None,
+    params: dict[str, Any] | list[tuple[str, Any]] | None = None,
     json: Any | None = None,
     security_settings: KaosSecuritySettings | None = None,
 ) -> Any:
@@ -109,7 +109,7 @@ async def fetch_text(
     *,
     api: str,
     method: str = "GET",
-    params: dict[str, Any] | None = None,
+    params: dict[str, Any] | list[tuple[str, Any]] | None = None,
     security_settings: KaosSecuritySettings | None = None,
 ) -> str:
     """Streamed text fetch with size cap + typed retryable errors.
