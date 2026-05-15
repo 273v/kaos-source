@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0a4] — 2026-05-15
+
 ### Fixed
 
 - **`kaos-source-fs-list` and `kaos-source-archive-list` `patterns`
