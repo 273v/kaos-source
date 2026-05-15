@@ -130,6 +130,58 @@ class TestRegistration:
                 f"{forbidden} is offline but leaked into web tools subset"
             )
 
+    def test_every_forensics_tool_carries_the_tag(self, runtime: KaosRuntime) -> None:
+        """Per `kaos-modules/docs/internal/dynamic-tool-planning-completion-plan.md`
+        §2.4, the 13 offline kaos-source tools must carry
+        ``tags=["forensics"]`` so kaos-agents' `derive_group()` classifies
+        them into the SessionToolSet ``forensics`` group. A new offline
+        tool added without the tag silently lands in ``documents``
+        instead; this test catches that drift.
+        """
+        register_source_forensics_tools(runtime)
+        offline_tool_names = {
+            "kaos-source-discover",
+            "kaos-source-describe",
+            "kaos-source-preview",
+            "kaos-source-materialize",
+            "kaos-source-inspect-archive",
+            "kaos-source-pacer-parse",
+            "kaos-source-pacer-filter-entries",
+            "kaos-source-vcard-parse",
+            "kaos-source-parse-eml",
+            "kaos-source-parse-mbox",
+            "kaos-source-email-forensics",
+            "kaos-source-file-metadata",
+            "kaos-source-image-metadata",
+        }
+        registered = {t.metadata.name: t.metadata for t in runtime.tools.list_tool_objects()}
+        # All 13 forensics tools are actually registered.
+        missing = offline_tool_names - set(registered)
+        assert not missing, f"register_source_forensics_tools missed {missing}"
+        # Each one carries the forensics tag.
+        for name in offline_tool_names:
+            tags = registered[name].tags
+            assert "forensics" in tags, (
+                f"{name} is an offline tool but lacks tags=['forensics']; "
+                f"got tags={tags}. This breaks SessionToolSet classification."
+            )
+
+    def test_fetch_url_does_not_carry_forensics_tag(self, runtime: KaosRuntime) -> None:
+        """`kaos-source-fetch-url` performs network egress (openWorldHint=True)
+        and must NOT be tagged ``forensics`` — that would let a session
+        with only the ``forensics`` group surface a network-egress tool."""
+        register_source_web_tools(runtime)
+        fetch_url = next(
+            (
+                t
+                for t in runtime.tools.list_tool_objects()
+                if t.metadata.name == "kaos-source-fetch-url"
+            ),
+            None,
+        )
+        assert fetch_url is not None
+        assert "forensics" not in fetch_url.metadata.tags
+
     def test_register_source_forensics_tools_subset(self, runtime: KaosRuntime) -> None:
         """`register_source_forensics_tools` registers only the 13 offline tools.
 

@@ -51,6 +51,7 @@ class VCardParseTool(KaosTool):
             ),
             category=ToolCategory.DOCUMENT,
             capability=ToolCapability.EXTRACT,
+            tags=["forensics"],
             module_name=_MODULE,
             version=_VERSION,
             annotations=_VCARD_ANNOTATIONS,
