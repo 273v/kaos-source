@@ -131,6 +131,7 @@ class DiscoverSourcesTool(KaosTool):
                     type="array",
                     description='Glob patterns to filter files (e.g. ["*.pdf", "*.docx"]).',
                     required=False,
+                    constraints={"items": {"type": "string"}},
                 ),
                 ParameterSchema(
                     name="cursor",
@@ -559,6 +560,7 @@ class InspectArchiveTool(KaosTool):
                     type="array",
                     description='Glob patterns to filter members (e.g. ["*.pdf"]).',
                     required=False,
+                    constraints={"items": {"type": "string"}},
                 ),
             ],
         )
