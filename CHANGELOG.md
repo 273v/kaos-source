@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`kaos-source-fs-list` and `kaos-source-archive-list` `patterns`
+  parameters now declare their element type.** Both were
+  previously `type=array` with no `items`, which OpenAI's strict
+  JSON Schema validator rejected with HTTP 400
+  `invalid_function_parameters`, taking down the whole tool catalog
+  for the turn. Now `items: {type: "string"}` because the patterns
+  are glob strings. kaos-core 0.1.0a7's defensive `items: {}` floor
+  is belt + suspenders.
+
 - **CI: nightly integration tests now allow loopback for local
   fixtures.** kaos-core 0.1.0a5's strict-by-default SSRF guard
   (``KaosSecuritySettings.block_loopback=True``) rejected the tests'
