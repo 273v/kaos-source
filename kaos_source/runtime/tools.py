@@ -617,43 +617,85 @@ class InspectArchiveTool(KaosTool):
         return ToolResult.create_success(output=result, summary=summary)
 
 
-def register_source_tools(runtime: KaosRuntime) -> int:
-    """Register all source tools with the runtime. Returns count.
+def register_source_web_tools(runtime: KaosRuntime) -> int:
+    """Register the online (network-accessing) source tools.
 
-    Registers core discovery tools AND all data retrieval connector tools
-    (Federal Register, eCFR, GovInfo, EDGAR, PACER). This is the function
-    called by ``kaos-mcp serve --module source``.
+    The 17 tools that fetch bytes or query a remote API over HTTP:
+
+    - ``kaos-source-fetch-url`` (generic HTTP/HTTPS GET → artifact)
+    - Federal Register API (4 tools)
+    - eCFR API (4 tools)
+    - GovInfo API (3 tools)
+    - SEC EDGAR API (3 tools)
+    - GLEIF LEI API (2 tools)
+
+    Pins the SessionToolSet ``web`` group entry point for kaos-source.
+    A session that opts into the ``web`` group (network egress
+    allowed) gets exactly these tools.
     """
-    tools: list[KaosTool] = [
-        DiscoverSourcesTool(),
-        DescribeSourceTool(),
-        PreviewSourceTool(),
-        MaterializeSourceTool(),
-        FetchURLTool(),
-        InspectArchiveTool(),
-    ]
-    for tool in tools:
-        runtime.tools.register_tool(tool)
-    count = len(tools)
-
-    # Register all data retrieval connector tools (cohesive locations
-    # post-Track-1: API tools live in apis/<X>/tools.py; parser tools
-    # live next to their parsers — see chunk 8 commits).
     from kaos_source.apis.ecfr.tools import register_ecfr_tools
     from kaos_source.apis.edgar.tools import register_edgar_tools
     from kaos_source.apis.federal_register.tools import register_federal_register_tools
     from kaos_source.apis.gleif.tools import register_gleif_tools
     from kaos_source.apis.govinfo.tools import register_govinfo_tools
-    from kaos_source.parsers import register_forensics_tools
-    from kaos_source.parsers.pacer.tools import register_pacer_tools
-    from kaos_source.parsers.vcard.tools import register_vcard_tools
 
+    runtime.tools.register_tool(FetchURLTool())
+    count = 1
     count += register_federal_register_tools(runtime)
     count += register_ecfr_tools(runtime)
     count += register_govinfo_tools(runtime)
     count += register_edgar_tools(runtime)
+    count += register_gleif_tools(runtime)
+    return count
+
+
+def register_source_forensics_tools(runtime: KaosRuntime) -> int:
+    """Register the offline (local byte-processing) source tools.
+
+    The 13 tools that operate on already-local bytes — no network
+    egress:
+
+    - Core filesystem discovery (5 tools): ``discover``, ``describe``,
+      ``preview``, ``materialize``, ``inspect-archive``
+    - PACER docket parser (2 tools)
+    - vCard parser (1 tool)
+    - Email parser bundle (3 tools): ``parse-eml``, ``parse-mbox``,
+      ``email-forensics``
+    - File + image metadata extractors (2 tools)
+
+    Pins the SessionToolSet ``forensics`` group entry point for
+    kaos-source. Default-on at the ceiling because these are
+    read-only operations on bytes the session already controls.
+    """
+    from kaos_source.parsers import register_forensics_tools as _register_email_metadata
+    from kaos_source.parsers.pacer.tools import register_pacer_tools
+    from kaos_source.parsers.vcard.tools import register_vcard_tools
+
+    core_tools: list[KaosTool] = [
+        DiscoverSourcesTool(),
+        DescribeSourceTool(),
+        PreviewSourceTool(),
+        MaterializeSourceTool(),
+        InspectArchiveTool(),
+    ]
+    for tool in core_tools:
+        runtime.tools.register_tool(tool)
+    count = len(core_tools)
     count += register_pacer_tools(runtime)
     count += register_vcard_tools(runtime)
-    count += register_gleif_tools(runtime)
-    count += register_forensics_tools(runtime)
+    count += _register_email_metadata(runtime)
+    return count
+
+
+def register_source_tools(runtime: KaosRuntime) -> int:
+    """Register all source tools with the runtime. Returns count.
+
+    Backward-compatible union of :func:`register_source_web_tools`
+    (17 online tools) and :func:`register_source_forensics_tools`
+    (13 offline tools). This is the function called by
+    ``kaos-mcp serve --module source``; existing callers see the
+    same 30 tools as before.
+    """
+    count = register_source_web_tools(runtime)
+    count += register_source_forensics_tools(runtime)
     return count

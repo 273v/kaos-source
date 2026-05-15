@@ -106,7 +106,11 @@ from kaos_source.registry import (
     default_parser_registry,
 )
 from kaos_source.runtime.service import SourceService
-from kaos_source.runtime.tools import register_source_tools
+from kaos_source.runtime.tools import (
+    register_source_forensics_tools,
+    register_source_tools,
+    register_source_web_tools,
+)
 
 __all__ = [
     "ApiConnector",
@@ -164,6 +168,8 @@ __all__ = [
     "register_gleif_tools",
     "register_govinfo_tools",
     "register_pacer_tools",
+    "register_source_forensics_tools",
     "register_source_tools",
+    "register_source_web_tools",
     "register_vcard_tools",
 ]

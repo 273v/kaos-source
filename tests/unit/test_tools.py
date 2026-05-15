@@ -15,7 +15,9 @@ from kaos_source.runtime.tools import (
     InspectArchiveTool,
     MaterializeSourceTool,
     PreviewSourceTool,
+    register_source_forensics_tools,
     register_source_tools,
+    register_source_web_tools,
 )
 
 # ---------------------------------------------------------------------------
@@ -91,6 +93,80 @@ class TestRegistration:
             "kaos-source-inspect-archive",
         }
         assert expected.issubset(names)
+
+    def test_register_source_web_tools_subset(self, runtime: KaosRuntime) -> None:
+        """`register_source_web_tools` registers only the 17 online tools.
+
+        Pins the SessionToolSet ``web`` group entry point for
+        kaos-source: a session that grants network egress sees
+        ``fetch-url`` + every FR / eCFR / GovInfo / EDGAR / GLEIF
+        API tool. No offline parsers or filesystem discovery leak
+        in.
+        """
+        count = register_source_web_tools(runtime)
+        # 1 fetch-url + 4 FR + 4 eCFR + 3 GovInfo + 3 EDGAR + 2 GLEIF = 17.
+        assert count == 17
+        names = {t.metadata.name for t in runtime.tools.list_tool_objects()}
+        # Every web tool is present.
+        for required in (
+            "kaos-source-fetch-url",
+            "kaos-source-fr-search",
+            "kaos-source-ecfr-titles",
+            "kaos-source-govinfo-search",
+            "kaos-source-edgar-search",
+            "kaos-source-gleif-search",
+        ):
+            assert required in names, f"missing online tool: {required}"
+        # No offline tool leaked.
+        for forbidden in (
+            "kaos-source-discover",
+            "kaos-source-parse-eml",
+            "kaos-source-pacer-parse",
+            "kaos-source-vcard-parse",
+            "kaos-source-file-metadata",
+            "kaos-source-inspect-archive",
+        ):
+            assert forbidden not in names, (
+                f"{forbidden} is offline but leaked into web tools subset"
+            )
+
+    def test_register_source_forensics_tools_subset(self, runtime: KaosRuntime) -> None:
+        """`register_source_forensics_tools` registers only the 13 offline tools.
+
+        Pins the SessionToolSet ``forensics`` group entry point.
+        Default-on at the ceiling because these are read-only
+        operations on bytes the session already controls — no
+        network egress.
+        """
+        count = register_source_forensics_tools(runtime)
+        # 5 core (discover, describe, preview, materialize,
+        # inspect-archive) + 2 pacer + 1 vcard + 5 email/metadata = 13.
+        assert count == 13
+        names = {t.metadata.name for t in runtime.tools.list_tool_objects()}
+        for required in (
+            "kaos-source-discover",
+            "kaos-source-describe",
+            "kaos-source-preview",
+            "kaos-source-materialize",
+            "kaos-source-inspect-archive",
+            "kaos-source-pacer-parse",
+            "kaos-source-vcard-parse",
+            "kaos-source-parse-eml",
+            "kaos-source-parse-mbox",
+            "kaos-source-email-forensics",
+            "kaos-source-file-metadata",
+            "kaos-source-image-metadata",
+        ):
+            assert required in names, f"missing offline tool: {required}"
+        # No online tool leaked.
+        for forbidden in (
+            "kaos-source-fetch-url",
+            "kaos-source-fr-search",
+            "kaos-source-edgar-search",
+        ):
+            assert forbidden not in names, (
+                f"{forbidden} is online but leaked into forensics tools subset"
+            )
 
 
 # ---------------------------------------------------------------------------
