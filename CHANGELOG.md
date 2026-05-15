@@ -8,6 +8,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0a5] — 2026-05-15
+
+### Added — web + forensics registration entry points (PRD PR 1)
+
+- **`register_source_web_tools(runtime)`** — registers the 17
+  online (network-accessing) source tools: `kaos-source-fetch-url`
+  plus every Federal Register / eCFR / GovInfo / SEC EDGAR / GLEIF
+  API tool. Pins the SessionToolSet `web` group entry point: a
+  session that grants network egress sees exactly these tools.
+- **`register_source_forensics_tools(runtime)`** — registers the
+  13 offline (local byte-processing) source tools: filesystem
+  discovery (`discover`, `describe`, `preview`, `materialize`,
+  `inspect-archive`), PACER docket parser (2 tools), vCard parser,
+  email parser bundle (`parse-eml`, `parse-mbox`,
+  `email-forensics`), and file / image metadata extractors. Pins
+  the SessionToolSet `forensics` group entry point. Default-on
+  at the ceiling because every tool is read-only on bytes the
+  session already controls — no network egress.
+- **`register_source_tools(runtime)`** is now a backward-compatible
+  union of the two — every existing caller continues to see the
+  same 30 tools with the same names and schemas.
+
+Motivated by `kaos-modules/docs/internal/dynamic-tool-planning-prd.md`
+§4 ("PR 1 — catalog expansion"; round-2 decision #5). Purely
+additive: no tool name, schema, or behavior changes.
+
 ## [0.1.0a4] — 2026-05-15
 
 ### Fixed
