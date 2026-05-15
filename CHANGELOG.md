@@ -8,6 +8,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0a6] — 2026-05-15
+
+### Added — `tags=["forensics"]` on offline tools (PRD PR 2 Stage A.5)
+
+Every offline kaos-source tool now carries `tags=["forensics"]` so
+kaos-agents' `derive_group()` (introduced in kaos-agents 0.1.0a3)
+classifies them into the SessionToolSet `forensics` group rather than
+the broader `documents` group.
+
+Affected tools (13 total):
+
+- **Core discovery** (5): `kaos-source-discover`, `kaos-source-describe`,
+  `kaos-source-preview`, `kaos-source-materialize`,
+  `kaos-source-inspect-archive`
+- **PACER** (2): `kaos-source-pacer-parse`,
+  `kaos-source-pacer-filter-entries`
+- **vCard** (1): `kaos-source-vcard-parse`
+- **Email** (3): `kaos-source-parse-eml`, `kaos-source-parse-mbox`,
+  `kaos-source-email-forensics`
+- **Metadata** (2): `kaos-source-file-metadata`,
+  `kaos-source-image-metadata`
+
+`kaos-source-fetch-url` deliberately does NOT carry the tag — it
+performs network egress (`openWorldHint=True`) and belongs in the
+`web` group via the kaos-agents derivation, not `forensics`.
+
+Tests:
+  - 2 new tests in `tests/unit/test_tools.py` pinning the tag coverage:
+    every forensics tool carries the tag, and `fetch-url` does not.
+
+Motivated by `kaos-modules/docs/internal/dynamic-tool-planning-completion-plan.md`
+§4 Stage A.5. Purely additive: the `tags` field was empty before;
+classification works unchanged for callers that don't read tags.
+
 ## [0.1.0a5] — 2026-05-15
 
 ### Added — web + forensics registration entry points (PRD PR 1)
