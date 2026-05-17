@@ -340,22 +340,52 @@ class FRGetContentTool(KaosTool):
                 "or use kaos-source-fetch-url with the pdf_url to materialize the PDF."
             )
 
-        # Truncate very long content
-        max_chars = 50_000
-        truncated = len(content) > max_chars
-        if truncated:
-            content = content[:max_chars]
+        if context is None or context.runtime is None:
+            return ToolResult.create_error(
+                "No runtime context available. "
+                "FRGetContent materializes content as an artifact and "
+                "requires a KaosRuntime with artifact storage."
+            )
 
-        output = {
-            "document_number": doc_num,
-            "title": doc.title,
-            "format": fmt,
-            "content": content,
-            "truncated": truncated,
-        }
-        trunc_note = " (truncated)" if truncated else ""
-        summary = f"{doc.title} — {len(content)} chars ({fmt}){trunc_note}"
-        return ToolResult.create_success(output=output, summary=summary)
+        mime_type = {
+            "text": "text/plain",
+            "xml": "application/xml",
+            "html": "text/html",
+        }[fmt]
+        body = content.encode("utf-8")
+        manifest = await context.runtime.artifacts.create_from_bytes(
+            body,
+            context_id=context.session_id,
+            session_id=context.session_id,
+            name=f"fr-{doc_num}.{fmt}",
+            description=doc.title,
+            mime_type=mime_type,
+            source_uri=doc.html_url,
+            provenance={
+                "tool": "kaos-source-fr-get-content",
+                "document_number": doc_num,
+                "format": fmt,
+            },
+            metadata={
+                "title": doc.title,
+                "publication_date": getattr(doc, "publication_date", None),
+            },
+        )
+
+        return manifest.to_tool_result(
+            summary=f"{doc.title} — {manifest.size:,} bytes ({fmt})",
+            structured_content={
+                "artifact_id": manifest.artifact_id,
+                "body_uri": manifest.body_uri,
+                "size": manifest.size,
+                "mime_type": manifest.mime_type,
+                "document_number": doc_num,
+                "title": doc.title,
+                "format": fmt,
+                "source_url": doc.html_url,
+            },
+            inline_body=content,
+        )
 
 
 class FRAgenciesTool(KaosTool):

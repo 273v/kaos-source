@@ -41,9 +41,11 @@ classifiers = [
 ]
 dependencies = [
   "httpx>=0.28.1",
-  # kaos_core.security (validate_outbound_url, read_capped_json) debuts
-  # in 0.1.0a4. Required by KSRC-02 + KSRC-04 + KSRC-07 fixes.
-  "kaos-core>=0.1.0a4,<0.2",
+  # kaos_core.ArtifactStore.create_from_bytes + ArtifactManifest.source_uri
+  # + KaosCoreArtifactSettings debut in 0.1.0a8. Required by Stage B2 of the
+  # no-hardcoded-caps-and-artifact-first-tool-results plan (FR/eCFR get-content
+  # tools migrated off max_chars truncation to artifact materialization).
+  "kaos-core>=0.1.0a8,<0.2",
   "pydantic>=2.11.0",
 ]
 

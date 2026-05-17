@@ -212,27 +212,74 @@ class TestFRGetContent:
         "kaos_source.apis.federal_register.client.fetch_document_content", new_callable=AsyncMock
     )
     @patch("kaos_source.apis.federal_register.client.get_document", new_callable=AsyncMock)
-    async def test_get_text_content(self, mock_get: AsyncMock, mock_fetch: AsyncMock) -> None:
+    async def test_get_text_content(
+        self, mock_get: AsyncMock, mock_fetch: AsyncMock, runtime
+    ) -> None:
+        from kaos_core import KaosContext
+
         mock_get.return_value = _SAMPLE_DOC
-        mock_fetch.return_value = "This is the full text of the regulation..."
+        full_text = "This is the full text of the regulation. " * 2_000  # ~84 KB
+        mock_fetch.return_value = full_text
+        context = KaosContext.create(session_id="fr-text", runtime=runtime)
         tool = FRGetContentTool()
-        result = await tool.execute({"document_number": "2024-12345"})
+        result = await tool.execute({"document_number": "2024-12345"}, context=context)
+
         assert not result.isError
         assert result.structuredContent is not None
-        assert "This is the full text" in result.structuredContent["content"]
+        sc = result.structuredContent
+        assert sc["format"] == "text"
+        assert sc["document_number"] == "2024-12345"
+        assert sc["mime_type"] == "text/plain"
+        assert sc["size"] == len(full_text.encode("utf-8"))
+        artifact_id = sc["artifact_id"]
+        assert artifact_id
+
+        # Full body roundtrip — no truncation
+        body = await runtime.artifacts.read_text(artifact_id)
+        assert body == full_text
 
     @patch(
         "kaos_source.apis.federal_register.client.fetch_document_content", new_callable=AsyncMock
     )
     @patch("kaos_source.apis.federal_register.client.get_document", new_callable=AsyncMock)
-    async def test_get_html_content(self, mock_get: AsyncMock, mock_fetch: AsyncMock) -> None:
+    async def test_get_html_content(
+        self, mock_get: AsyncMock, mock_fetch: AsyncMock, runtime
+    ) -> None:
+        from kaos_core import KaosContext
+
         mock_get.return_value = _SAMPLE_DOC
         mock_fetch.return_value = "<html><body>Regulation text</body></html>"
+        context = KaosContext.create(session_id="fr-html", runtime=runtime)
         tool = FRGetContentTool()
-        result = await tool.execute({"document_number": "2024-12345", "format": "html"})
+        result = await tool.execute(
+            {"document_number": "2024-12345", "format": "html"}, context=context
+        )
         assert not result.isError
         assert result.structuredContent is not None
         assert result.structuredContent["format"] == "html"
+        assert result.structuredContent["mime_type"] == "text/html"
+        assert result.structuredContent["artifact_id"]
+
+    async def test_missing_runtime_errors(self) -> None:
+        # No context → tool errors rather than silently truncating.
+        from unittest.mock import patch as _patch
+
+        with (
+            _patch(
+                "kaos_source.apis.federal_register.client.fetch_document_content",
+                new_callable=AsyncMock,
+            ) as mock_fetch,
+            _patch(
+                "kaos_source.apis.federal_register.client.get_document",
+                new_callable=AsyncMock,
+            ) as mock_get,
+        ):
+            mock_get.return_value = _SAMPLE_DOC
+            mock_fetch.return_value = "some content"
+            tool = FRGetContentTool()
+            result = await tool.execute({"document_number": "2024-12345"})
+        assert result.isError
+        assert "runtime context" in (result.text or "").lower()
 
     async def test_missing_document_number(self) -> None:
         tool = FRGetContentTool()

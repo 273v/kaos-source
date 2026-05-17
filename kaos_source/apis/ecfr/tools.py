@@ -282,26 +282,54 @@ class ECFRContentTool(KaosTool):
                 "Use kaos-source-ecfr-structure to browse the title."
             )
 
-        # Truncate very long content
-        max_chars = 50_000
-        truncated = len(content) > max_chars
-        if truncated:
-            content = content[:max_chars]
+        if context is None or context.runtime is None:
+            return ToolResult.create_error(
+                "No runtime context available. "
+                "ECFRContent materializes content as an artifact and "
+                "requires a KaosRuntime with artifact storage."
+            )
 
         ref = f"§{section}" if section else f"Part {part}"
-        output = {
-            "title": title,
-            "section": section,
-            "part": part,
-            "date": date_str,
-            "format": fmt,
-            "content": content,
-            "truncated": truncated,
-            "length": len(content),
-        }
-        trunc_note = " (truncated)" if truncated else ""
-        summary = f"Title {title} {ref} — {len(content)} chars ({fmt}){trunc_note}"
-        return ToolResult.create_success(output=output, summary=summary)
+        mime_type = {"html": "text/html", "xml": "application/xml"}[fmt]
+        body = content.encode("utf-8")
+        slug = (section or f"part-{part}").replace("/", "-").replace(" ", "")
+        source_uri = (
+            f"https://www.ecfr.gov/api/versioner/v1/full/{date_str}/title-{title}.{fmt}"
+            + (f"?section={section}" if section else f"?part={part}")
+        )
+        manifest = await context.runtime.artifacts.create_from_bytes(
+            body,
+            context_id=context.session_id,
+            session_id=context.session_id,
+            name=f"ecfr-t{title}-{slug}-{date_str}.{fmt}",
+            description=f"CFR Title {title} {ref} ({date_str})",
+            mime_type=mime_type,
+            source_uri=source_uri,
+            provenance={
+                "tool": "kaos-source-ecfr-content",
+                "title": title,
+                "section": section,
+                "part": part,
+                "date": date_str,
+                "format": fmt,
+            },
+        )
+
+        return manifest.to_tool_result(
+            summary=f"Title {title} {ref} — {manifest.size:,} bytes ({fmt})",
+            structured_content={
+                "artifact_id": manifest.artifact_id,
+                "body_uri": manifest.body_uri,
+                "size": manifest.size,
+                "mime_type": manifest.mime_type,
+                "title": title,
+                "section": section,
+                "part": part,
+                "date": date_str,
+                "format": fmt,
+            },
+            inline_body=content,
+        )
 
 
 class ECFRSearchTool(KaosTool):

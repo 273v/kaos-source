@@ -76,8 +76,10 @@ class TestFRBattle:
         assert detail.structuredContent["document_number"] == doc_num
         assert detail.structuredContent["title"]
 
-    async def test_read_fr_document_text(self) -> None:
+    async def test_read_fr_document_text(self, runtime) -> None:
         """Agent: 'Read the full text of this Federal Register notice'"""
+        from kaos_core import KaosContext
+
         from kaos_source.apis.federal_register.tools import FRGetContentTool, FRSearchTool
 
         # Find a notice
@@ -94,17 +96,21 @@ class TestFRBattle:
         doc_num = result.structuredContent["results"][0]["document_number"]
 
         # Read its text content
+        context = KaosContext.create(session_id="fr-battle-text", runtime=runtime)
         content = FRGetContentTool()
         text_result = await content.execute(
             {
                 "document_number": doc_num,
                 "format": "text",
-            }
+            },
+            context=context,
         )
         # Some documents may not have text URLs available
         if not text_result.isError:
             assert text_result.structuredContent is not None
-            assert len(text_result.structuredContent["content"]) > 0
+            assert text_result.structuredContent["size"] > 0
+            body = await runtime.artifacts.read_text(text_result.structuredContent["artifact_id"])
+            assert len(body) > 0
 
     async def test_find_sec_related_rules(self) -> None:
         """Agent: 'What SEC rules were published in January 2024?'"""
@@ -188,10 +194,13 @@ class TestECFRBattle:
         labels = [r["label"] for r in sc["results"]]
         assert any("ozone" in label.lower() for label in labels)
 
-    async def test_read_specific_cfr_section(self) -> None:
+    async def test_read_specific_cfr_section(self, runtime) -> None:
         """Agent: 'Read 40 CFR § 82.1 — Purpose and scope of ozone protection'"""
+        from kaos_core import KaosContext
+
         from kaos_source.apis.ecfr.tools import ECFRContentTool
 
+        context = KaosContext.create(session_id="cfr-battle", runtime=runtime)
         tool = ECFRContentTool()
         result = await tool.execute(
             {
@@ -199,13 +208,16 @@ class TestECFRBattle:
                 "part": "82",
                 "date": "2024-01-01",
                 "format": "html",
-            }
+            },
+            context=context,
         )
         assert not result.isError
         sc = result.structuredContent
         assert sc is not None
-        assert len(sc["content"]) > 500
-        assert "<" in sc["content"]  # HTML content
+        assert sc["size"] > 500
+        body = await runtime.artifacts.read_text(sc["artifact_id"])
+        assert len(body) > 500
+        assert "<" in body  # HTML content
 
     async def test_browse_all_cfr_titles(self) -> None:
         """Agent: 'List all CFR titles'"""
@@ -223,10 +235,13 @@ class TestECFRBattle:
         assert 40 in numbers  # Environment
         assert 17 in numbers  # Commodity and Securities Exchanges
 
-    async def test_read_tax_code_section(self) -> None:
+    async def test_read_tax_code_section(self, runtime) -> None:
         """Agent: 'Read a section from Title 26 (Internal Revenue)'"""
+        from kaos_core import KaosContext
+
         from kaos_source.apis.ecfr.tools import ECFRContentTool
 
+        context = KaosContext.create(session_id="cfr-tax-battle", runtime=runtime)
         tool = ECFRContentTool()
         result = await tool.execute(
             {
@@ -234,12 +249,13 @@ class TestECFRBattle:
                 "part": "1",
                 "date": "2024-01-01",
                 "format": "html",
-            }
+            },
+            context=context,
         )
         # Title 26 Part 1 is very large; may work or may timeout
         if not result.isError:
             assert result.structuredContent is not None
-            assert len(result.structuredContent["content"]) > 100
+            assert result.structuredContent["size"] > 100
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -201,20 +201,40 @@ class TestStructure:
 
 class TestContent:
     @patch("kaos_source.apis.ecfr.client.get_section_content", new_callable=AsyncMock)
-    async def test_get_section_content(self, mock_get: AsyncMock) -> None:
-        mock_get.return_value = "<div>Section content here</div>"
+    async def test_get_section_content(self, mock_get: AsyncMock, runtime) -> None:
+        from kaos_core import KaosContext
+
+        full_html = "<div>Section content here</div>" + ("<p>filler</p>" * 5_000)
+        mock_get.return_value = full_html
+        context = KaosContext.create(session_id="ecfr-section", runtime=runtime)
         tool = ECFRContentTool()
-        result = await tool.execute({"title": 40, "section": "82.1"})
+        result = await tool.execute(
+            {"title": 40, "section": "82.1", "date": "2024-01-01"}, context=context
+        )
         assert not result.isError
         assert result.structuredContent is not None
-        assert "Section content here" in result.structuredContent["content"]
+        sc = result.structuredContent
+        assert sc["mime_type"] == "text/html"
+        assert sc["size"] == len(full_html.encode("utf-8"))
+        artifact_id = sc["artifact_id"]
+        assert artifact_id
+
+        body = await runtime.artifacts.read_text(artifact_id)
+        assert body == full_html
 
     @patch("kaos_source.apis.ecfr.client.get_section_content", new_callable=AsyncMock)
-    async def test_get_part_content(self, mock_get: AsyncMock) -> None:
+    async def test_get_part_content(self, mock_get: AsyncMock, runtime) -> None:
+        from kaos_core import KaosContext
+
         mock_get.return_value = "<div>Part 82 full text</div>"
+        context = KaosContext.create(session_id="ecfr-part", runtime=runtime)
         tool = ECFRContentTool()
-        result = await tool.execute({"title": 40, "part": "82"})
+        result = await tool.execute(
+            {"title": 40, "part": "82", "date": "2024-01-01"}, context=context
+        )
         assert not result.isError
+        assert result.structuredContent is not None
+        assert result.structuredContent["artifact_id"]
 
     async def test_missing_section_and_part(self) -> None:
         tool = ECFRContentTool()
@@ -223,13 +243,20 @@ class TestContent:
         assert "kaos-source-ecfr-structure" in (result.text or "")
 
     @patch("kaos_source.apis.ecfr.client.get_section_content", new_callable=AsyncMock)
-    async def test_content_xml_format(self, mock_get: AsyncMock) -> None:
+    async def test_content_xml_format(self, mock_get: AsyncMock, runtime) -> None:
+        from kaos_core import KaosContext
+
         mock_get.return_value = "<CFR><section>XML content</section></CFR>"
+        context = KaosContext.create(session_id="ecfr-xml", runtime=runtime)
         tool = ECFRContentTool()
-        result = await tool.execute({"title": 40, "section": "82.1", "format": "xml"})
+        result = await tool.execute(
+            {"title": 40, "section": "82.1", "format": "xml", "date": "2024-01-01"},
+            context=context,
+        )
         assert not result.isError
         assert result.structuredContent is not None
         assert result.structuredContent["format"] == "xml"
+        assert result.structuredContent["mime_type"] == "application/xml"
 
 
 # ---------------------------------------------------------------------------
