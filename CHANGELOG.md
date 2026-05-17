@@ -8,6 +8,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Every file-input MCP tool now routes through
+  `kaos_core.path_resolver.resolve_input_path`** via the new
+  `kaos_source._path_resolver.resolve_source_input` adapter. Tools
+  previously called `Path(p).expanduser().resolve()` + `.exists()` on
+  agent input, which could not see files uploaded into the session
+  VFS (`KaosRuntime.vfs`) by a UI host such as the kaos-ui
+  single-user-chat SPA — the agent then either saw an unbroken
+  sequence of `File not found` errors or, worse, hallucinated answers
+  from zero successful reads. Each tool's `path` ParameterSchema
+  description now explicitly documents the supported shapes
+  (absolute filesystem path, `kaos://artifacts/<id>` URI for a
+  previously materialised artifact, or a relative path / `kaos://`
+  URI that resolves inside the session VFS).
+
+  Tools refactored (9): `kaos-source-discover`, `kaos-source-describe`,
+  `kaos-source-preview`, `kaos-source-materialize`,
+  `kaos-source-inspect-archive` (runtime), and
+  `kaos-source-parse-eml`, `kaos-source-parse-mbox`,
+  `kaos-source-email-forensics`, `kaos-source-vcard-parse`,
+  `kaos-source-image-metadata`, `kaos-source-file-metadata`,
+  `kaos-source-pacer-parse`, `kaos-source-pacer-filter-entries`
+  (parsers). On resolver failure the tools return a
+  `ToolResult.create_error(...)` whose body is the resolver's
+  three-part agent-friendly message (what went wrong + how to fix +
+  alternative tool) instead of bare `FileNotFoundError` text.
+
+  `kaos-source-materialize` additionally short-circuits when the
+  input was already a `kaos://artifacts/<id>` URI: the existing
+  manifest is returned with `already_materialized: true` in
+  `structured_content` instead of double-materialising into a
+  duplicate artifact. The success path's existing
+  `manifest.to_tool_result(...)` emission is preserved unchanged.
+
+  This is Stage 4 of the cross-package
+  `vfs-blind-tools-audit-and-fix-plan` in the kaos-modules monorepo
+  (`kaos-modules/docs/plans/vfs-blind-tools-audit-and-fix-plan.md`).
+
+### Fixed
+
+- **SES2 — `kaos-source-fetch-url` now refuses `kaos://` URIs with
+  agent-friendly guidance** (closes filed task #402). Previously the
+  tool routed `kaos://artifacts/<id>` straight into
+  `SourceLocator.http(...)` which rejected the scheme with a bare
+  `"must use http or https"` message — the agent had no way to know
+  the right tool was `kaos-source-materialize` (for a VFS file) or
+  `kaos-content-*` (for an already-materialised artifact). A new
+  scheme-detection block at the top of `FetchURLTool.execute()`
+  short-circuits any URL that starts with `kaos://` and returns a
+  clear "this is an internal URI, use these tools instead" error.
+  HTTP and HTTPS URLs flow through unchanged.
+
+### Dependencies
+
+- `kaos-core>=0.1.0a9` (bumped from `>=0.1.0a8`) — required for
+  `kaos_core.path_resolver.resolve_input_path`, which introduces
+  the unified VFS-aware path resolution helper.
+
 ## [0.1.0a7] — 2026-05-17
 
 ### Changed (hard break — alpha train)

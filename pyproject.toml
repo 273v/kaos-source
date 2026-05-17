@@ -41,11 +41,11 @@ classifiers = [
 ]
 dependencies = [
   "httpx>=0.28.1",
-  # kaos_core.ArtifactStore.create_from_bytes + ArtifactManifest.source_uri
-  # + KaosCoreArtifactSettings debut in 0.1.0a8. Required by Stage B2 of the
-  # no-hardcoded-caps-and-artifact-first-tool-results plan (FR/eCFR get-content
-  # tools migrated off max_chars truncation to artifact materialization).
-  "kaos-core>=0.1.0a8,<0.2",
+  # kaos_core.path_resolver.resolve_input_path debuts in 0.1.0a9. Required
+  # by Stage 4 of the vfs-blind-tools-audit-and-fix plan: every file-input
+  # MCP tool routes agent-supplied paths through the helper so VFS uploads
+  # from a host UI become visible.
+  "kaos-core>=0.1.0a9,<0.2",
   "pydantic>=2.11.0",
 ]
 
@@ -170,6 +170,7 @@ include = ["kaos_source", "tests"]
 [tool.uv]
 package = true
 exclude-newer = "72 hours"
+
 [tool.uv.exclude-newer-package]
 "kaos-citations" = false
 "kaos-content" = false
