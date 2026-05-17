@@ -8,6 +8,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0a7] — 2026-05-17
+
+### Changed (hard break — alpha train)
+
+- **`kaos-source-fr-get-content`** (Federal Register) and
+  **`kaos-source-ecfr-content`** (eCFR) now materialise fetched content
+  as artifacts via `ArtifactStore.create_from_bytes` and return
+  `manifest.to_tool_result(...)`. The legacy `max_chars=50_000`
+  truncation block is **deleted** — full bodies, no matter the size,
+  are addressable via `structured_content.artifact_id`. The artifact
+  tier system (`KaosCoreArtifactSettings`, env-overridable via
+  `KAOS_CORE_ARTIFACT_INLINE_THRESHOLD` / `_SUMMARY_THRESHOLD`) picks
+  inline / summary+link / link-only automatically. `source_uri` is
+  populated on the manifest (FR's `doc.html_url`; reconstructed eCFR
+  versioner URL).
+
+  **Structured-content schema change** (intentional break, per the
+  alpha train's "explicitly unstable" status): the old `content`,
+  `truncated`, and `length` keys are gone. New keys: `artifact_id`,
+  `body_uri`, `size`, `mime_type` (plus the original
+  `document_number` / `title` / `format` / `source_url` for FR, and
+  `title` / `section` / `part` / `date` / `format` for eCFR).
+  Downstream callers migrate by reading
+  `structured_content.artifact_id` and calling `store.read_text(id)`
+  when they need the body.
+
+- Both tools now require a `KaosRuntime` via the `KaosContext`
+  parameter (mirror of `FetchURLTool`'s pattern at
+  `runtime/tools.py:450-527`). Callers without runtime context get a
+  clear error pointing at that requirement.
+
+### Why
+
+This is Stage B2 of the cross-package
+`no-hardcoded-caps-and-artifact-first-tool-results` plan in the
+kaos-modules monorepo. The 50_000 char cap on FR / eCFR content has
+been a chronic correctness bug — long regulations like Reg S-P
+(~107 KB) were silently truncated, leaving downstream agents
+hallucinating from incomplete inputs. The artifact path materialises
+the full body once, exposes it via the resource link, and lets
+consumers (agents, the SPA Documents panel, kaos-content downstream
+tools) read all of it.
+
+### Dependencies
+
+- `kaos-core>=0.1.0a8` (bumped from `>=0.1.0a4`) — required for
+  `ArtifactStore.create_from_bytes`, `ArtifactManifest.source_uri`, and
+  the `KaosCoreArtifactSettings`-driven `to_tool_result` tier
+  selection.
+
 ## [0.1.0a6] — 2026-05-15
 
 ### Added — `tags=["forensics"]` on offline tools (PRD PR 2 Stage A.5)

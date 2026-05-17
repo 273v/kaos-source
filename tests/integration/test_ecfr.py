@@ -65,12 +65,19 @@ class TestECFRToolsLive:
         assert result.structuredContent is not None
         assert result.structuredContent["part_count"] > 0
 
-    async def test_content_tool(self) -> None:
+    async def test_content_tool(self, runtime) -> None:
+        from kaos_core import KaosContext
+
+        context = KaosContext.create(session_id="ecfr-content-live", runtime=runtime)
         tool = ECFRContentTool()
-        result = await tool.execute({"title": 1, "part": "1", "date": "2024-01-01"})
+        result = await tool.execute(
+            {"title": 1, "part": "1", "date": "2024-01-01"}, context=context
+        )
         assert not result.isError
         assert result.structuredContent is not None
-        assert len(result.structuredContent["content"]) > 100
+        assert result.structuredContent["size"] > 100
+        body = await runtime.artifacts.read_text(result.structuredContent["artifact_id"])
+        assert len(body) > 100
 
     async def test_search_tool(self) -> None:
         tool = ECFRSearchTool()
