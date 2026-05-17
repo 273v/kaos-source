@@ -6,13 +6,17 @@ required.  Supports vCard 2.1, 3.0, and 4.0 (RFC 6350 / RFC 2426).
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from kaos_core import KaosContext, KaosRuntime, KaosTool, ToolMetadata, ToolResult
 from kaos_core.types.annotations import ToolAnnotations
 from kaos_core.types.enums import ToolCapability, ToolCategory
 from kaos_core.types.parameters import ParameterSchema
+
+from kaos_source._path_resolver import (
+    InputPathResolutionError,
+    resolve_source_input,
+)
 
 _MODULE = "kaos-source"
 _VERSION = "0.1.0"
@@ -68,7 +72,10 @@ class VCardParseTool(KaosTool):
                     name="path",
                     type="string",
                     description=(
-                        "Path to a .vcf file. Provide either 'content' or 'path', not both."
+                        "Path to a .vcf file. Provide either 'content' or 'path', "
+                        "not both. Accepts an absolute filesystem path, a "
+                        "kaos://artifacts/<id> URI, or a relative path / kaos:// URI "
+                        "that resolves inside the session VFS."
                     ),
                     required=False,
                 ),
@@ -90,19 +97,19 @@ class VCardParseTool(KaosTool):
             return ToolResult.create_error("Provide either 'content' or 'path', not both.")
 
         if path_str:
-            path = Path(path_str).expanduser().resolve()
-            if not path.exists():
-                return ToolResult.create_error(
-                    f"File not found: {path_str}. Verify the path is correct."
-                )
-            if not path.is_file():
-                return ToolResult.create_error(
-                    f"'{path_str}' is not a file. Provide a path to a .vcf file."
-                )
             try:
-                content = path.read_text(encoding="utf-8", errors="replace")
-            except Exception as exc:
-                return ToolResult.create_error(f"Failed to read file '{path_str}': {exc}.")
+                async with resolve_source_input(path_str, context) as resolved:
+                    path = resolved.path
+                    if not path.is_file():
+                        return ToolResult.create_error(
+                            f"'{path_str}' is not a file. Provide a path to a .vcf file."
+                        )
+                    try:
+                        content = path.read_text(encoding="utf-8", errors="replace")
+                    except Exception as exc:
+                        return ToolResult.create_error(f"Failed to read file '{path_str}': {exc}.")
+            except InputPathResolutionError as exc:
+                return ToolResult.create_error(exc.to_agent_message())
 
         from kaos_source.parsers.vcard.parser import parse_vcard
 

@@ -7,13 +7,20 @@ source operations (filesystem, archive, HTTP, browser, memory).
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from kaos_core import KaosContext, KaosRuntime, KaosTool, ToolMetadata, ToolResult
 from kaos_core.types.annotations import ToolAnnotations
 from kaos_core.types.enums import ToolCapability, ToolCategory
 from kaos_core.types.parameters import ParameterSchema
+
+from kaos_source._path_resolver import (
+    InputPathResolutionError,
+    ResolvedOrigin,
+    resolve_source_input,
+)
+
+_KAOS_URI_PREFIX = "kaos://"
 
 _MODULE = "kaos-source"
 _VERSION = "0.1.0"
@@ -110,7 +117,13 @@ class DiscoverSourcesTool(KaosTool):
                 ParameterSchema(
                     name="path",
                     type="string",
-                    description="Directory or archive file path to explore.",
+                    description=(
+                        "Directory or archive file path to explore. Accepts an "
+                        "absolute filesystem path, a kaos://artifacts/<id> URI for "
+                        "a previously materialised artifact, or a relative path / "
+                        "kaos:// URI that resolves inside the session VFS (e.g. files "
+                        "uploaded through the host UI)."
+                    ),
                 ),
                 ParameterSchema(
                     name="recursive",
@@ -146,71 +159,71 @@ class DiscoverSourcesTool(KaosTool):
     async def execute(
         self, inputs: dict[str, Any], context: KaosContext | None = None
     ) -> ToolResult:
-        path_str = inputs["path"]
-        path = Path(path_str).expanduser().resolve()
-
-        if not path.exists():
-            return ToolResult.create_error(
-                f"Path not found: {path_str}. "
-                "Verify the path is correct. Use an absolute path or relative "
-                "to the working directory."
-            )
-
-        from kaos_source.models import SourceLocator
-        from kaos_source.options import SourceDiscoverOptions
-
-        # Auto-detect: archive file vs directory
-        if path.is_file() and path.suffix.lower() in {
-            ".zip",
-            ".tar",
-            ".gz",
-            ".bz2",
-            ".tgz",
-            ".xz",
-        }:
-            locator = SourceLocator.archive(path)
-        elif path.is_dir():
-            locator = SourceLocator.filesystem(path)
-        else:
-            return ToolResult.create_error(
-                f"'{path_str}' is a file, not a directory or archive. "
-                "Use 'kaos-source-describe' for file metadata or 'kaos-source-preview' for content."
-            )
-
-        service = _get_service()
-        ctx = context or KaosContext.create(session_id="tools", runtime=KaosRuntime.default())
-
-        options = SourceDiscoverOptions(
-            recursive=inputs.get("recursive", True),
-            limit=min(inputs.get("limit", 50), 500),
-            patterns=inputs.get("patterns") or [],
-            cursor=inputs.get("cursor"),
-        )
-
+        path_str = inputs.get("path", "")
         try:
-            page = await service.discover(locator, ctx, options)
-        except Exception as exc:
-            return ToolResult.create_error(
-                f"Discovery failed for '{path_str}': {exc}. "
-                "Check that the path is accessible and not corrupted."
-            )
+            async with resolve_source_input(path_str, context) as resolved:
+                path = resolved.path
 
-        items = [_descriptor_to_dict(item) for item in page.items]
-        result = {
-            "path": str(path),
-            "items": items,
-            "count": len(items),
-            "next_cursor": page.next_cursor,
-            "has_more": page.next_cursor is not None,
-        }
-        if page.total_count is not None:
-            result["total_count"] = page.total_count
+                from kaos_source.models import SourceLocator
+                from kaos_source.options import SourceDiscoverOptions
 
-        summary = f"Found {len(items)} item(s) in {path.name}"
-        if page.next_cursor:
-            summary += " (more available)"
+                # Auto-detect: archive file vs directory
+                if path.is_file() and path.suffix.lower() in {
+                    ".zip",
+                    ".tar",
+                    ".gz",
+                    ".bz2",
+                    ".tgz",
+                    ".xz",
+                }:
+                    locator = SourceLocator.archive(path)
+                elif path.is_dir():
+                    locator = SourceLocator.filesystem(path)
+                else:
+                    return ToolResult.create_error(
+                        f"'{path_str}' is a file, not a directory or archive. "
+                        "Use 'kaos-source-describe' for file metadata or "
+                        "'kaos-source-preview' for content."
+                    )
 
-        return ToolResult.create_success(output=result, summary=summary)
+                service = _get_service()
+                ctx = context or KaosContext.create(
+                    session_id="tools", runtime=KaosRuntime.default()
+                )
+
+                options = SourceDiscoverOptions(
+                    recursive=inputs.get("recursive", True),
+                    limit=min(inputs.get("limit", 50), 500),
+                    patterns=inputs.get("patterns") or [],
+                    cursor=inputs.get("cursor"),
+                )
+
+                try:
+                    page = await service.discover(locator, ctx, options)
+                except Exception as exc:
+                    return ToolResult.create_error(
+                        f"Discovery failed for '{path_str}': {exc}. "
+                        "Check that the path is accessible and not corrupted."
+                    )
+
+                items = [_descriptor_to_dict(item) for item in page.items]
+                result = {
+                    "path": str(path),
+                    "items": items,
+                    "count": len(items),
+                    "next_cursor": page.next_cursor,
+                    "has_more": page.next_cursor is not None,
+                }
+                if page.total_count is not None:
+                    result["total_count"] = page.total_count
+
+                summary = f"Found {len(items)} item(s) in {path.name}"
+                if page.next_cursor:
+                    summary += " (more available)"
+
+                return ToolResult.create_success(output=result, summary=summary)
+        except InputPathResolutionError as exc:
+            return ToolResult.create_error(exc.to_agent_message())
 
 
 class DescribeSourceTool(KaosTool):
@@ -236,7 +249,11 @@ class DescribeSourceTool(KaosTool):
                 ParameterSchema(
                     name="path",
                     type="string",
-                    description="File path to describe.",
+                    description=(
+                        "File path to describe. Accepts an absolute filesystem path, "
+                        "a kaos://artifacts/<id> URI, or a relative path / kaos:// URI "
+                        "that resolves inside the session VFS."
+                    ),
                 ),
             ],
         )
@@ -244,36 +261,40 @@ class DescribeSourceTool(KaosTool):
     async def execute(
         self, inputs: dict[str, Any], context: KaosContext | None = None
     ) -> ToolResult:
-        path_str = inputs["path"]
-        path = Path(path_str).expanduser().resolve()
-
-        if not path.exists():
-            return ToolResult.create_error(
-                f"File not found: {path_str}. Verify the path is correct."
-            )
-        if not path.is_file():
-            return ToolResult.create_error(
-                f"'{path_str}' is a directory, not a file. "
-                "Use 'kaos-source-discover' to list directory contents."
-            )
-
-        from kaos_source.models import SourceLocator
-
-        locator = SourceLocator.filesystem(path)
-        service = _get_service()
-        ctx = context or KaosContext.create(session_id="tools", runtime=KaosRuntime.default())
-
+        path_str = inputs.get("path", "")
         try:
-            desc = await service.describe(locator, ctx)
-        except Exception as exc:
-            return ToolResult.create_error(
-                f"Failed to describe '{path_str}': {exc}. "
-                "The file may be inaccessible or have permission issues."
-            )
+            async with resolve_source_input(path_str, context) as resolved:
+                path = resolved.path
 
-        result = _descriptor_to_dict(desc)
-        summary = f"{desc.name} — {desc.mime_type or 'unknown type'}, {_format_size(desc.size)}"
-        return ToolResult.create_success(output=result, summary=summary)
+                if not path.is_file():
+                    return ToolResult.create_error(
+                        f"'{path_str}' is a directory, not a file. "
+                        "Use 'kaos-source-discover' to list directory contents."
+                    )
+
+                from kaos_source.models import SourceLocator
+
+                locator = SourceLocator.filesystem(path)
+                service = _get_service()
+                ctx = context or KaosContext.create(
+                    session_id="tools", runtime=KaosRuntime.default()
+                )
+
+                try:
+                    desc = await service.describe(locator, ctx)
+                except Exception as exc:
+                    return ToolResult.create_error(
+                        f"Failed to describe '{path_str}': {exc}. "
+                        "The file may be inaccessible or have permission issues."
+                    )
+
+                result = _descriptor_to_dict(desc)
+                summary = (
+                    f"{desc.name} — {desc.mime_type or 'unknown type'}, {_format_size(desc.size)}"
+                )
+                return ToolResult.create_success(output=result, summary=summary)
+        except InputPathResolutionError as exc:
+            return ToolResult.create_error(exc.to_agent_message())
 
 
 class PreviewSourceTool(KaosTool):
@@ -299,7 +320,11 @@ class PreviewSourceTool(KaosTool):
                 ParameterSchema(
                     name="path",
                     type="string",
-                    description="File path to preview.",
+                    description=(
+                        "File path to preview. Accepts an absolute filesystem path, "
+                        "a kaos://artifacts/<id> URI, or a relative path / kaos:// URI "
+                        "that resolves inside the session VFS."
+                    ),
                 ),
                 ParameterSchema(
                     name="max_bytes",
@@ -315,51 +340,53 @@ class PreviewSourceTool(KaosTool):
     async def execute(
         self, inputs: dict[str, Any], context: KaosContext | None = None
     ) -> ToolResult:
-        path_str = inputs["path"]
-        path = Path(path_str).expanduser().resolve()
-
-        if not path.exists():
-            return ToolResult.create_error(
-                f"File not found: {path_str}. Verify the path is correct."
-            )
-        if not path.is_file():
-            return ToolResult.create_error(
-                f"'{path_str}' is a directory. Use 'kaos-source-discover' to list contents."
-            )
-
-        from kaos_source.models import SourceLocator
-        from kaos_source.options import SourcePreviewOptions
-
-        locator = SourceLocator.filesystem(path)
-        service = _get_service()
-        ctx = context or KaosContext.create(session_id="tools", runtime=KaosRuntime.default())
-        max_bytes = min(inputs.get("max_bytes", 1024), 32768)
-        options = SourcePreviewOptions(max_bytes=max_bytes)
-
+        path_str = inputs.get("path", "")
         try:
-            preview = await service.preview(locator, ctx, options)
-        except Exception as exc:
-            return ToolResult.create_error(
-                f"Preview failed for '{path_str}': {exc}. "
-                "The file may be inaccessible or corrupted."
-            )
+            async with resolve_source_input(path_str, context) as resolved:
+                path = resolved.path
 
-        result: dict[str, Any] = {
-            "source_id": preview.source_id,
-            "truncated": preview.truncated,
-            "size": preview.size,
-            "mime_type": preview.mime_type,
-        }
-        if preview.text_preview is not None:
-            result["text"] = preview.text_preview
-            content_len = len(preview.text_preview)
-        else:
-            result["binary_base64"] = preview.binary_preview_base64
-            content_len = len(preview.binary_preview_base64 or "")
+                if not path.is_file():
+                    return ToolResult.create_error(
+                        f"'{path_str}' is a directory. Use 'kaos-source-discover' to list contents."
+                    )
 
-        trunc = " (truncated)" if preview.truncated else ""
-        summary = f"Preview of {path.name}: {content_len} chars{trunc}"
-        return ToolResult.create_success(output=result, summary=summary)
+                from kaos_source.models import SourceLocator
+                from kaos_source.options import SourcePreviewOptions
+
+                locator = SourceLocator.filesystem(path)
+                service = _get_service()
+                ctx = context or KaosContext.create(
+                    session_id="tools", runtime=KaosRuntime.default()
+                )
+                max_bytes = min(inputs.get("max_bytes", 1024), 32768)
+                options = SourcePreviewOptions(max_bytes=max_bytes)
+
+                try:
+                    preview = await service.preview(locator, ctx, options)
+                except Exception as exc:
+                    return ToolResult.create_error(
+                        f"Preview failed for '{path_str}': {exc}. "
+                        "The file may be inaccessible or corrupted."
+                    )
+
+                result: dict[str, Any] = {
+                    "source_id": preview.source_id,
+                    "truncated": preview.truncated,
+                    "size": preview.size,
+                    "mime_type": preview.mime_type,
+                }
+                if preview.text_preview is not None:
+                    result["text"] = preview.text_preview
+                    content_len = len(preview.text_preview)
+                else:
+                    result["binary_base64"] = preview.binary_preview_base64
+                    content_len = len(preview.binary_preview_base64 or "")
+
+                trunc = " (truncated)" if preview.truncated else ""
+                summary = f"Preview of {path.name}: {content_len} chars{trunc}"
+                return ToolResult.create_success(output=result, summary=summary)
+        except InputPathResolutionError as exc:
+            return ToolResult.create_error(exc.to_agent_message())
 
 
 class MaterializeSourceTool(KaosTool):
@@ -385,7 +412,13 @@ class MaterializeSourceTool(KaosTool):
                 ParameterSchema(
                     name="path",
                     type="string",
-                    description="File path to materialize.",
+                    description=(
+                        "File path to materialize. Accepts an absolute filesystem "
+                        "path or a relative path / kaos:// URI that resolves inside "
+                        "the session VFS. Passing a kaos://artifacts/<id> URI for a "
+                        "file that has already been materialised is a no-op: the "
+                        "existing manifest is returned unchanged."
+                    ),
                 ),
                 ParameterSchema(
                     name="name",
@@ -399,17 +432,7 @@ class MaterializeSourceTool(KaosTool):
     async def execute(
         self, inputs: dict[str, Any], context: KaosContext | None = None
     ) -> ToolResult:
-        path_str = inputs["path"]
-        path = Path(path_str).expanduser().resolve()
-
-        if not path.exists():
-            return ToolResult.create_error(
-                f"File not found: {path_str}. Verify the path is correct."
-            )
-        if not path.is_file():
-            return ToolResult.create_error(
-                f"'{path_str}' is a directory. Materialize individual files, not directories."
-            )
+        path_str = inputs.get("path", "")
 
         if context is None or context.runtime is None:
             return ToolResult.create_error(
@@ -418,33 +441,73 @@ class MaterializeSourceTool(KaosTool):
                 "Use 'kaos-source-preview' for a quick look at file content without runtime."
             )
 
-        from kaos_source.models import SourceLocator
-        from kaos_source.options import SourceMaterializeOptions
-
-        locator = SourceLocator.filesystem(path)
-        service = _get_service()
-        options = SourceMaterializeOptions(artifact_name=inputs.get("name"))
-
         try:
-            result = await service.materialize(locator, context, options)
-        except Exception as exc:
-            return ToolResult.create_error(
-                f"Materialization failed for '{path_str}': {exc}. "
-                "The file may be inaccessible or the artifact store may be unavailable."
-            )
+            async with resolve_source_input(path_str, context) as resolved:
+                path = resolved.path
 
-        return result.manifest.to_tool_result(
-            summary=f"Materialized {path.name} ({_format_size(result.bytes_written)})",
-            structured_content={
-                "artifact_id": result.artifact_ref.artifact_id,
-                "name": result.descriptor.name,
-                "mime_type": result.descriptor.mime_type,
-                "size": result.descriptor.size,
-                "bytes_written": result.bytes_written,
-                "body_uri": result.manifest.body_uri,
-                "retention_policy": str(result.retention_policy),
-            },
-        )
+                if not path.is_file():
+                    return ToolResult.create_error(
+                        f"'{path_str}' is a directory. "
+                        "Materialize individual files, not directories."
+                    )
+
+                # Short-circuit: if the input was already an artifact URI, the
+                # artifact store already holds the bytes — return the existing
+                # manifest instead of double-materialising into a new artifact.
+                if resolved.origin is ResolvedOrigin.ARTIFACT and resolved.artifact_id is not None:
+                    artifacts = context.runtime.artifacts
+                    manifest = await artifacts._resolve_async(  # type: ignore[attr-defined]
+                        resolved.artifact_id,
+                        caller_session_id=context.session_id,
+                    )
+                    summary = (
+                        f"Already materialised: {manifest.name or path.name} "
+                        f"({_format_size(resolved.size)})"
+                    )
+                    return manifest.to_tool_result(
+                        summary=summary,
+                        structured_content={
+                            "artifact_id": manifest.artifact_id,
+                            "name": manifest.name,
+                            "mime_type": manifest.mime_type,
+                            "size": manifest.size,
+                            "bytes_written": 0,
+                            "body_uri": getattr(manifest, "body_uri", None)
+                            or f"kaos://artifacts/{manifest.artifact_id}",
+                            "already_materialized": True,
+                        },
+                    )
+
+                from kaos_source.models import SourceLocator
+                from kaos_source.options import SourceMaterializeOptions
+
+                locator = SourceLocator.filesystem(path)
+                service = _get_service()
+                options = SourceMaterializeOptions(artifact_name=inputs.get("name"))
+
+                try:
+                    result = await service.materialize(locator, context, options)
+                except Exception as exc:
+                    return ToolResult.create_error(
+                        f"Materialization failed for '{path_str}': {exc}. "
+                        "The file may be inaccessible or the artifact store "
+                        "may be unavailable."
+                    )
+
+                return result.manifest.to_tool_result(
+                    summary=f"Materialized {path.name} ({_format_size(result.bytes_written)})",
+                    structured_content={
+                        "artifact_id": result.artifact_ref.artifact_id,
+                        "name": result.descriptor.name,
+                        "mime_type": result.descriptor.mime_type,
+                        "size": result.descriptor.size,
+                        "bytes_written": result.bytes_written,
+                        "body_uri": result.manifest.body_uri,
+                        "retention_policy": str(result.retention_policy),
+                    },
+                )
+        except InputPathResolutionError as exc:
+            return ToolResult.create_error(exc.to_agent_message())
 
 
 class FetchURLTool(KaosTool):
@@ -484,6 +547,21 @@ class FetchURLTool(KaosTool):
         self, inputs: dict[str, Any], context: KaosContext | None = None
     ) -> ToolResult:
         url = inputs["url"]
+
+        # SES2 fix: ``kaos://`` is an internal artifact / VFS URI scheme,
+        # not an HTTP URL. Without this short-circuit the URL validator
+        # below rejects ``kaos://artifacts/<id>`` with an unhelpful
+        # "must use http or https" error and the agent has no idea
+        # which tool to try next. See issue #402 / Stage 4 of the
+        # vfs-blind-tools-audit-and-fix plan in kaos-modules.
+        if isinstance(url, str) and url.strip().lower().startswith(_KAOS_URI_PREFIX):
+            return ToolResult.create_error(
+                f"{url!r} is an internal artifact / VFS URI, not an HTTP URL. "
+                "To read VFS artifacts use the kaos-content-* tools with the "
+                "artifact_id. To materialize a VFS file as an artifact use "
+                "kaos-source-materialize. To fetch an external web page use "
+                "kaos-source-fetch-url with an https:// URL."
+            )
 
         if context is None or context.runtime is None:
             return ToolResult.create_error(
@@ -550,7 +628,12 @@ class InspectArchiveTool(KaosTool):
                 ParameterSchema(
                     name="path",
                     type="string",
-                    description="Path to the archive file (ZIP, TAR, TAR.GZ, etc.).",
+                    description=(
+                        "Path to the archive file (ZIP, TAR, TAR.GZ, etc.). "
+                        "Accepts an absolute filesystem path, a kaos://artifacts/<id> "
+                        "URI, or a relative path / kaos:// URI that resolves inside "
+                        "the session VFS."
+                    ),
                 ),
                 ParameterSchema(
                     name="limit",
@@ -573,53 +656,55 @@ class InspectArchiveTool(KaosTool):
     async def execute(
         self, inputs: dict[str, Any], context: KaosContext | None = None
     ) -> ToolResult:
-        path_str = inputs["path"]
-        path = Path(path_str).expanduser().resolve()
-
-        if not path.exists():
-            return ToolResult.create_error(
-                f"Archive not found: {path_str}. Verify the path is correct."
-            )
-        if not path.is_file():
-            return ToolResult.create_error(
-                f"'{path_str}' is a directory, not an archive. "
-                "Use 'kaos-source-discover' for directories."
-            )
-
-        from kaos_source.models import SourceLocator
-        from kaos_source.options import SourceDiscoverOptions
-
-        locator = SourceLocator.archive(path)
-        service = _get_service()
-        ctx = context or KaosContext.create(session_id="tools", runtime=KaosRuntime.default())
-
-        options = SourceDiscoverOptions(
-            recursive=True,
-            limit=min(inputs.get("limit", 100), 500),
-            patterns=inputs.get("patterns") or [],
-        )
-
+        path_str = inputs.get("path", "")
         try:
-            page = await service.discover(locator, ctx, options)
-        except Exception as exc:
-            return ToolResult.create_error(
-                f"Failed to inspect archive '{path_str}': {exc}. "
-                "The file may not be a valid archive or may be corrupted."
-            )
+            async with resolve_source_input(path_str, context) as resolved:
+                path = resolved.path
 
-        members = [_descriptor_to_dict(item) for item in page.items]
-        result = {
-            "archive": str(path),
-            "members": members,
-            "count": len(members),
-            "has_more": page.next_cursor is not None,
-        }
+                if not path.is_file():
+                    return ToolResult.create_error(
+                        f"'{path_str}' is a directory, not an archive. "
+                        "Use 'kaos-source-discover' for directories."
+                    )
 
-        summary = f"{path.name}: {len(members)} member(s)"
-        if page.next_cursor:
-            summary += " (more available)"
+                from kaos_source.models import SourceLocator
+                from kaos_source.options import SourceDiscoverOptions
 
-        return ToolResult.create_success(output=result, summary=summary)
+                locator = SourceLocator.archive(path)
+                service = _get_service()
+                ctx = context or KaosContext.create(
+                    session_id="tools", runtime=KaosRuntime.default()
+                )
+
+                options = SourceDiscoverOptions(
+                    recursive=True,
+                    limit=min(inputs.get("limit", 100), 500),
+                    patterns=inputs.get("patterns") or [],
+                )
+
+                try:
+                    page = await service.discover(locator, ctx, options)
+                except Exception as exc:
+                    return ToolResult.create_error(
+                        f"Failed to inspect archive '{path_str}': {exc}. "
+                        "The file may not be a valid archive or may be corrupted."
+                    )
+
+                members = [_descriptor_to_dict(item) for item in page.items]
+                result = {
+                    "archive": str(path),
+                    "members": members,
+                    "count": len(members),
+                    "has_more": page.next_cursor is not None,
+                }
+
+                summary = f"{path.name}: {len(members)} member(s)"
+                if page.next_cursor:
+                    summary += " (more available)"
+
+                return ToolResult.create_success(output=result, summary=summary)
+        except InputPathResolutionError as exc:
+            return ToolResult.create_error(exc.to_agent_message())
 
 
 def register_source_web_tools(runtime: KaosRuntime) -> int:

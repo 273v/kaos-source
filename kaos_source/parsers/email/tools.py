@@ -14,13 +14,17 @@ Tools (3):
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from kaos_core import KaosContext, KaosRuntime, KaosTool, ToolMetadata, ToolResult
 from kaos_core.types.annotations import ToolAnnotations
 from kaos_core.types.enums import ToolCapability, ToolCategory
 from kaos_core.types.parameters import ParameterSchema
+
+from kaos_source._path_resolver import (
+    InputPathResolutionError,
+    resolve_source_input,
+)
 
 _MODULE = "kaos-source"
 _VERSION = "0.1.0"
@@ -64,7 +68,11 @@ class ParseEmlTool(KaosTool):
                 ParameterSchema(
                     name="path",
                     type="string",
-                    description="Path to a .eml file.",
+                    description=(
+                        "Path to a .eml file. Accepts an absolute filesystem path, "
+                        "a kaos://artifacts/<id> URI, or a relative path / kaos:// "
+                        "URI that resolves inside the session VFS."
+                    ),
                 ),
             ],
         )
@@ -76,31 +84,34 @@ class ParseEmlTool(KaosTool):
         if not path_str:
             return ToolResult.create_error("Parameter 'path' is required.")
 
-        path = Path(path_str).expanduser().resolve()
-        if not path.exists():
-            return ToolResult.create_error(f"File not found: {path_str}")
-        if not path.is_file():
-            return ToolResult.create_error(f"Not a file: {path_str}")
-
-        from kaos_source.parsers.email.eml import parse_eml_file
-
         try:
-            result = parse_eml_file(path)
-        except Exception as exc:
-            return ToolResult.create_error(
-                f"Failed to parse EML: {exc}. Verify the file is a valid RFC 5322 email message."
-            )
+            async with resolve_source_input(path_str, context) as resolved:
+                path = resolved.path
+                if not path.is_file():
+                    return ToolResult.create_error(f"Not a file: {path_str}")
 
-        output = result.model_dump(mode="json", exclude_none=True)
+                from kaos_source.parsers.email.eml import parse_eml_file
 
-        parts = []
-        if result.from_address:
-            parts.append(f"from: {result.from_address.address}")
-        if result.subject:
-            parts.append(result.subject[:60])
-        parts.append(f"{result.attachment_count} attachment(s)")
+                try:
+                    result = parse_eml_file(path)
+                except Exception as exc:
+                    return ToolResult.create_error(
+                        f"Failed to parse EML: {exc}. "
+                        "Verify the file is a valid RFC 5322 email message."
+                    )
 
-        return ToolResult.create_success(output, summary=" | ".join(parts))
+                output = result.model_dump(mode="json", exclude_none=True)
+
+                parts = []
+                if result.from_address:
+                    parts.append(f"from: {result.from_address.address}")
+                if result.subject:
+                    parts.append(result.subject[:60])
+                parts.append(f"{result.attachment_count} attachment(s)")
+
+                return ToolResult.create_success(output, summary=" | ".join(parts))
+        except InputPathResolutionError as exc:
+            return ToolResult.create_error(exc.to_agent_message())
 
 
 # ── kaos-source-parse-mbox ─────────────────────────────────────────
@@ -128,7 +139,15 @@ class ParseMboxTool(KaosTool):
             version=_VERSION,
             annotations=_FORENSIC_ANNOTATIONS,
             input_schema=[
-                ParameterSchema(name="path", type="string", description="Path to .mbox file."),
+                ParameterSchema(
+                    name="path",
+                    type="string",
+                    description=(
+                        "Path to .mbox file. Accepts an absolute filesystem path, "
+                        "a kaos://artifacts/<id> URI, or a relative path / kaos:// "
+                        "URI that resolves inside the session VFS."
+                    ),
+                ),
                 ParameterSchema(
                     name="limit",
                     type="integer",
@@ -146,25 +165,27 @@ class ParseMboxTool(KaosTool):
         if not path_str:
             return ToolResult.create_error("Parameter 'path' is required.")
 
-        path = Path(path_str).expanduser().resolve()
-        if not path.exists():
-            return ToolResult.create_error(f"File not found: {path_str}")
-
         limit = inputs.get("limit")
 
-        from kaos_source.parsers.email.mbox import parse_mbox
-
         try:
-            result = parse_mbox(path, limit=limit)
-        except Exception as exc:
-            return ToolResult.create_error(f"Failed to parse MBOX: {exc}")
+            async with resolve_source_input(path_str, context) as resolved:
+                path = resolved.path
 
-        output = result.model_dump(mode="json", exclude_none=True)
+                from kaos_source.parsers.email.mbox import parse_mbox
 
-        summary = f"{result.message_count} messages"
-        if result.errors:
-            summary += f" ({len(result.errors)} errors)"
-        return ToolResult.create_success(output, summary=summary)
+                try:
+                    result = parse_mbox(path, limit=limit)
+                except Exception as exc:
+                    return ToolResult.create_error(f"Failed to parse MBOX: {exc}")
+
+                output = result.model_dump(mode="json", exclude_none=True)
+
+                summary = f"{result.message_count} messages"
+                if result.errors:
+                    summary += f" ({len(result.errors)} errors)"
+                return ToolResult.create_success(output, summary=summary)
+        except InputPathResolutionError as exc:
+            return ToolResult.create_error(exc.to_agent_message())
 
 
 # ── kaos-source-email-forensics ────────────────────────────────────
@@ -197,7 +218,12 @@ class EmailForensicsTool(KaosTool):
                 ParameterSchema(
                     name="path",
                     type="string",
-                    description="Path to .eml file. Provide either 'path' or 'headers'.",
+                    description=(
+                        "Path to .eml file. Provide either 'path' or 'headers'. "
+                        "Accepts an absolute filesystem path, a kaos://artifacts/<id> "
+                        "URI, or a relative path / kaos:// URI that resolves inside "
+                        "the session VFS."
+                    ),
                     required=False,
                 ),
                 ParameterSchema(
@@ -222,10 +248,11 @@ class EmailForensicsTool(KaosTool):
 
         try:
             if path_str:
-                path = Path(path_str).expanduser().resolve()
-                if not path.exists():
-                    return ToolResult.create_error(f"File not found: {path_str}")
-                result = parse_eml_file(path)
+                try:
+                    async with resolve_source_input(path_str, context) as resolved:
+                        result = parse_eml_file(resolved.path)
+                except InputPathResolutionError as exc:
+                    return ToolResult.create_error(exc.to_agent_message())
             elif isinstance(headers_str, str | bytes):
                 result = parse_eml(headers_str, include_forensics=True)
             else:

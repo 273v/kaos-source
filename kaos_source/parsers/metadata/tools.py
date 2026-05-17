@@ -13,13 +13,17 @@ Tools (2):
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from kaos_core import KaosContext, KaosRuntime, KaosTool, ToolMetadata, ToolResult
 from kaos_core.types.annotations import ToolAnnotations
 from kaos_core.types.enums import ToolCapability, ToolCategory
 from kaos_core.types.parameters import ParameterSchema
+
+from kaos_source._path_resolver import (
+    InputPathResolutionError,
+    resolve_source_input,
+)
 
 _MODULE = "kaos-source"
 _VERSION = "0.1.0"
@@ -58,7 +62,15 @@ class ImageMetadataTool(KaosTool):
             version=_VERSION,
             annotations=_METADATA_ANNOTATIONS,
             input_schema=[
-                ParameterSchema(name="path", type="string", description="Path to image file."),
+                ParameterSchema(
+                    name="path",
+                    type="string",
+                    description=(
+                        "Path to image file. Accepts an absolute filesystem path, "
+                        "a kaos://artifacts/<id> URI, or a relative path / kaos:// "
+                        "URI that resolves inside the session VFS."
+                    ),
+                ),
             ],
         )
 
@@ -69,37 +81,39 @@ class ImageMetadataTool(KaosTool):
         if not path_str:
             return ToolResult.create_error("Parameter 'path' is required.")
 
-        path = Path(path_str).expanduser().resolve()
-        if not path.exists():
-            return ToolResult.create_error(f"File not found: {path_str}")
-
-        from kaos_source.parsers.metadata.image import extract_image_metadata
-
         try:
-            result = extract_image_metadata(path)
-        except Exception as exc:
-            return ToolResult.create_error(
-                f"Failed to extract image metadata: {exc}. "
-                "Verify the file is a valid image (JPEG, PNG, TIFF, WebP)."
-            )
+            async with resolve_source_input(path_str, context) as resolved:
+                path = resolved.path
 
-        output = result.model_dump(mode="json", exclude_none=True)
+                from kaos_source.parsers.metadata.image import extract_image_metadata
 
-        parts = []
-        if result.format:
-            parts.append(result.format)
-        if result.width and result.height:
-            parts.append(f"{result.width}x{result.height}")
-        if result.camera_model:
-            parts.append(result.camera_model)
-        if result.datetime_original:
-            parts.append(result.datetime_original[:10])
-        if result.gps:
-            parts.append(f"GPS: {result.gps.latitude:.4f},{result.gps.longitude:.4f}")
+                try:
+                    result = extract_image_metadata(path)
+                except Exception as exc:
+                    return ToolResult.create_error(
+                        f"Failed to extract image metadata: {exc}. "
+                        "Verify the file is a valid image (JPEG, PNG, TIFF, WebP)."
+                    )
 
-        return ToolResult.create_success(
-            output, summary=" | ".join(parts) if parts else f"Image: {path.name}"
-        )
+                output = result.model_dump(mode="json", exclude_none=True)
+
+                parts = []
+                if result.format:
+                    parts.append(result.format)
+                if result.width and result.height:
+                    parts.append(f"{result.width}x{result.height}")
+                if result.camera_model:
+                    parts.append(result.camera_model)
+                if result.datetime_original:
+                    parts.append(result.datetime_original[:10])
+                if result.gps:
+                    parts.append(f"GPS: {result.gps.latitude:.4f},{result.gps.longitude:.4f}")
+
+                return ToolResult.create_success(
+                    output, summary=" | ".join(parts) if parts else f"Image: {path.name}"
+                )
+        except InputPathResolutionError as exc:
+            return ToolResult.create_error(exc.to_agent_message())
 
 
 # ── kaos-source-file-metadata ──────────────────────────────────────
@@ -128,7 +142,15 @@ class FileMetadataTool(KaosTool):
             version=_VERSION,
             annotations=_METADATA_ANNOTATIONS,
             input_schema=[
-                ParameterSchema(name="path", type="string", description="Path to any file."),
+                ParameterSchema(
+                    name="path",
+                    type="string",
+                    description=(
+                        "Path to any file. Accepts an absolute filesystem path, "
+                        "a kaos://artifacts/<id> URI, or a relative path / kaos:// "
+                        "URI that resolves inside the session VFS."
+                    ),
+                ),
             ],
         )
 
@@ -139,33 +161,35 @@ class FileMetadataTool(KaosTool):
         if not path_str:
             return ToolResult.create_error("Parameter 'path' is required.")
 
-        path = Path(path_str).expanduser().resolve()
-        if not path.exists():
-            return ToolResult.create_error(f"File not found: {path_str}")
-        if not path.is_file():
-            return ToolResult.create_error(f"Not a file: {path_str}")
-
-        from kaos_source.parsers.metadata.file import extract_file_metadata
-
         try:
-            result = extract_file_metadata(path)
-        except Exception as exc:
-            return ToolResult.create_error(f"Failed to extract file metadata: {exc}")
+            async with resolve_source_input(path_str, context) as resolved:
+                path = resolved.path
+                if not path.is_file():
+                    return ToolResult.create_error(f"Not a file: {path_str}")
 
-        output = result.model_dump(mode="json", exclude_none=True)
+                from kaos_source.parsers.metadata.file import extract_file_metadata
 
-        parts = [result.name]
-        if result.mime_type:
-            parts.append(result.mime_type)
-        if result.size_bytes is not None:
-            if result.size_bytes < 1024:
-                parts.append(f"{result.size_bytes} B")
-            elif result.size_bytes < 1024 * 1024:
-                parts.append(f"{result.size_bytes / 1024:.1f} KB")
-            else:
-                parts.append(f"{result.size_bytes / (1024 * 1024):.1f} MB")
+                try:
+                    result = extract_file_metadata(path)
+                except Exception as exc:
+                    return ToolResult.create_error(f"Failed to extract file metadata: {exc}")
 
-        return ToolResult.create_success(output, summary=" | ".join(parts))
+                output = result.model_dump(mode="json", exclude_none=True)
+
+                parts = [result.name]
+                if result.mime_type:
+                    parts.append(result.mime_type)
+                if result.size_bytes is not None:
+                    if result.size_bytes < 1024:
+                        parts.append(f"{result.size_bytes} B")
+                    elif result.size_bytes < 1024 * 1024:
+                        parts.append(f"{result.size_bytes / 1024:.1f} KB")
+                    else:
+                        parts.append(f"{result.size_bytes / (1024 * 1024):.1f} MB")
+
+                return ToolResult.create_success(output, summary=" | ".join(parts))
+        except InputPathResolutionError as exc:
+            return ToolResult.create_error(exc.to_agent_message())
 
 
 # ── Registration ────────────────────────────────────────────────────

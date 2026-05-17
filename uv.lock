@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.13"
 
 [options]
-exclude-newer = "2026-05-14T17:10:29.609910389Z"
+exclude-newer = "2026-05-14T23:33:43.368711351Z"
 exclude-newer-span = "PT72H"
 
 [options.exclude-newer-package]
@@ -257,16 +257,47 @@ html = [
 
 [[package]]
 name = "kaos-core"
-version = "0.1.0a8"
-source = { registry = "https://pypi.org/simple" }
+source = { editable = "../kaos-core" }
 dependencies = [
     { name = "click" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c3/2b/fca45759b54fd4fd0ecd8d6076b1be9a77f88f86480d0dd26eb3086d4608/kaos_core-0.1.0a8.tar.gz", hash = "sha256:7ab60908135d4d80de92467ad12ee81fb7ed73886626a63aea3a9c1eaa795a4d", size = 173324, upload-time = "2026-05-17T17:04:31.706Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/df/92/9e4e5d2004b47a26f0d7c23bd088ee96f122761d4dcc6665622a7a12db02/kaos_core-0.1.0a8-py3-none-any.whl", hash = "sha256:af190ba82ea050880a41949612c2da1e2c57f2a9d7ba14293058883ea06b7830", size = 134790, upload-time = "2026-05-17T17:04:29.43Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "click", specifier = ">=8.1.8" },
+    { name = "cryptography", marker = "extra == 'encrypted-store'", specifier = ">=44" },
+    { name = "cryptography", marker = "extra == 'hardened'", specifier = ">=44" },
+    { name = "httpx", marker = "extra == 'hardened'", specifier = ">=0.28" },
+    { name = "httpx", marker = "extra == 'oauth'", specifier = ">=0.28" },
+    { name = "jeepney", marker = "sys_platform == 'linux' and extra == 'hardened'", specifier = ">=0.9" },
+    { name = "jeepney", marker = "sys_platform == 'linux' and extra == 'keyring'", specifier = ">=0.9" },
+    { name = "keyring", marker = "extra == 'hardened'", specifier = ">=25.7" },
+    { name = "keyring", marker = "extra == 'keyring'", specifier = ">=25.7" },
+    { name = "pydantic", specifier = ">=2.11.0" },
+    { name = "pydantic-settings", specifier = ">=2.8.1" },
+    { name = "pywin32", marker = "sys_platform == 'win32' and extra == 'windows-secure'", specifier = ">=308" },
+    { name = "secretstorage", marker = "sys_platform == 'linux' and extra == 'hardened'", specifier = ">=3.4" },
+    { name = "secretstorage", marker = "sys_platform == 'linux' and extra == 'keyring'", specifier = ">=3.4" },
+]
+provides-extras = ["encrypted-store", "hardened", "keyring", "oauth", "windows-secure"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "cryptography", specifier = ">=44" },
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "jeepney", marker = "sys_platform == 'linux'", specifier = ">=0.9" },
+    { name = "jsonschema", marker = "python_full_version < '3.15'", specifier = ">=4.21" },
+    { name = "keyring", specifier = ">=25.7" },
+    { name = "pytest", specifier = ">=9.0.3" },
+    { name = "pytest-asyncio", specifier = ">=1.3.0" },
+    { name = "pytest-benchmark", specifier = ">=5.1.0" },
+    { name = "pytest-cov", specifier = ">=7.1.0" },
+    { name = "pywin32", marker = "sys_platform == 'win32'", specifier = ">=308" },
+    { name = "ruff", specifier = ">=0.15.12" },
+    { name = "secretstorage", marker = "sys_platform == 'linux'", specifier = ">=3.4" },
+    { name = "ty", specifier = ">=0.0.34,<0.1" },
 ]
 
 [[package]]
@@ -322,7 +353,7 @@ dev = [
 requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "kaos-content", extras = ["html"], marker = "extra == 'content'", specifier = ">=0.1.0a2" },
-    { name = "kaos-core", specifier = ">=0.1.0a8,<0.2" },
+    { name = "kaos-core", editable = "../kaos-core" },
     { name = "kaos-nlp-core", marker = "extra == 'content'", specifier = ">=0.1.0a2" },
     { name = "lxml", marker = "extra == 'pacer'", specifier = ">=5.0.0" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.52.0" },
