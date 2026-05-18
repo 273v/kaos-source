@@ -45,7 +45,7 @@ dependencies = [
   # by Stage 4 of the vfs-blind-tools-audit-and-fix plan: every file-input
   # MCP tool routes agent-supplied paths through the helper so VFS uploads
   # from a host UI become visible.
-  "kaos-core>=0.1.0a9,<0.2",
+  "kaos-core>=0.1.0a10,<0.2",
   "pydantic>=2.11.0",
 ]
 

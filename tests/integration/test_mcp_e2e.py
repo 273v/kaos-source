@@ -199,7 +199,7 @@ class TestMCPEndToEnd:
             params={
                 "name": "kaos-source-discover",
                 "arguments": {
-                    "path": str(Path(__file__).resolve().parent.parent),
+                    "path": Path(__file__).resolve().parent.parent.as_uri(),
                     "patterns": ["*.py"],
                     "limit": 5,
                 },

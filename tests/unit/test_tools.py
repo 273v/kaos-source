@@ -277,14 +277,14 @@ class TestAnnotations:
 class TestDiscoverSources:
     async def test_discover_directory(self, ctx: KaosContext, sample_dir: Path) -> None:
         tool = DiscoverSourcesTool()
-        result = await tool.execute({"path": str(sample_dir)}, ctx)
+        result = await tool.execute({"path": sample_dir.as_uri()}, ctx)
         assert not result.isError
         assert result.structuredContent is not None
         assert result.structuredContent["count"] >= 3
 
     async def test_discover_with_pattern(self, ctx: KaosContext, sample_dir: Path) -> None:
         tool = DiscoverSourcesTool()
-        result = await tool.execute({"path": str(sample_dir), "patterns": ["*.txt"]}, ctx)
+        result = await tool.execute({"path": sample_dir.as_uri(), "patterns": ["*.txt"]}, ctx)
         assert not result.isError
         assert result.structuredContent is not None
         names = [item["name"] for item in result.structuredContent["items"]]
@@ -293,20 +293,20 @@ class TestDiscoverSources:
 
     async def test_discover_with_limit(self, ctx: KaosContext, sample_dir: Path) -> None:
         tool = DiscoverSourcesTool()
-        result = await tool.execute({"path": str(sample_dir), "limit": 1}, ctx)
+        result = await tool.execute({"path": sample_dir.as_uri(), "limit": 1}, ctx)
         assert not result.isError
         assert result.structuredContent is not None
         assert len(result.structuredContent["items"]) == 1
 
     async def test_discover_nonexistent_path(self, ctx: KaosContext) -> None:
         tool = DiscoverSourcesTool()
-        result = await tool.execute({"path": "/nonexistent/path"}, ctx)
+        result = await tool.execute({"path": "file:///nonexistent/path"}, ctx)
         assert result.isError
         assert "not found" in (result.text or "").lower()
 
     async def test_discover_file_not_dir(self, ctx: KaosContext, sample_file: Path) -> None:
         tool = DiscoverSourcesTool()
-        result = await tool.execute({"path": str(sample_file)}, ctx)
+        result = await tool.execute({"path": sample_file.as_uri()}, ctx)
         assert result.isError
         assert "kaos-source-describe" in (result.text or "")
 
@@ -314,14 +314,14 @@ class TestDiscoverSources:
         self, ctx: KaosContext, sample_archive: Path
     ) -> None:
         tool = DiscoverSourcesTool()
-        result = await tool.execute({"path": str(sample_archive)}, ctx)
+        result = await tool.execute({"path": sample_archive.as_uri()}, ctx)
         assert not result.isError
         assert result.structuredContent is not None
         assert result.structuredContent["count"] >= 2
 
     async def test_discover_non_recursive(self, ctx: KaosContext, sample_dir: Path) -> None:
         tool = DiscoverSourcesTool()
-        result = await tool.execute({"path": str(sample_dir), "recursive": False}, ctx)
+        result = await tool.execute({"path": sample_dir.as_uri(), "recursive": False}, ctx)
         assert not result.isError
         assert result.structuredContent is not None
         names = [item["name"] for item in result.structuredContent["items"]]
@@ -336,7 +336,7 @@ class TestDiscoverSources:
 class TestDescribeSource:
     async def test_describe_file(self, ctx: KaosContext, sample_file: Path) -> None:
         tool = DescribeSourceTool()
-        result = await tool.execute({"path": str(sample_file)}, ctx)
+        result = await tool.execute({"path": sample_file.as_uri()}, ctx)
         assert not result.isError
         assert result.structuredContent is not None
         assert result.structuredContent["name"] == "hello.txt"
@@ -345,19 +345,19 @@ class TestDescribeSource:
 
     async def test_describe_nonexistent(self, ctx: KaosContext) -> None:
         tool = DescribeSourceTool()
-        result = await tool.execute({"path": "/nonexistent/file.txt"}, ctx)
+        result = await tool.execute({"path": "file:///nonexistent/file.txt"}, ctx)
         assert result.isError
         assert "not found" in (result.text or "").lower()
 
     async def test_describe_directory(self, ctx: KaosContext, sample_dir: Path) -> None:
         tool = DescribeSourceTool()
-        result = await tool.execute({"path": str(sample_dir)}, ctx)
+        result = await tool.execute({"path": sample_dir.as_uri()}, ctx)
         assert result.isError
         assert "kaos-source-discover" in (result.text or "")
 
     async def test_describe_includes_mime_type(self, ctx: KaosContext, sample_file: Path) -> None:
         tool = DescribeSourceTool()
-        result = await tool.execute({"path": str(sample_file)}, ctx)
+        result = await tool.execute({"path": sample_file.as_uri()}, ctx)
         assert not result.isError
         assert result.structuredContent is not None
         assert result.structuredContent["mime_type"] is not None
@@ -371,7 +371,7 @@ class TestDescribeSource:
 class TestPreviewSource:
     async def test_preview_text_file(self, ctx: KaosContext, sample_file: Path) -> None:
         tool = PreviewSourceTool()
-        result = await tool.execute({"path": str(sample_file)}, ctx)
+        result = await tool.execute({"path": sample_file.as_uri()}, ctx)
         assert not result.isError
         assert result.structuredContent is not None
         assert "text" in result.structuredContent
@@ -379,27 +379,27 @@ class TestPreviewSource:
 
     async def test_preview_with_max_bytes(self, ctx: KaosContext, sample_file: Path) -> None:
         tool = PreviewSourceTool()
-        result = await tool.execute({"path": str(sample_file), "max_bytes": 5}, ctx)
+        result = await tool.execute({"path": sample_file.as_uri(), "max_bytes": 5}, ctx)
         assert not result.isError
         assert result.structuredContent is not None
         assert result.structuredContent["truncated"] is True
 
     async def test_preview_binary_file(self, ctx: KaosContext, binary_file: Path) -> None:
         tool = PreviewSourceTool()
-        result = await tool.execute({"path": str(binary_file)}, ctx)
+        result = await tool.execute({"path": binary_file.as_uri()}, ctx)
         assert not result.isError
         assert result.structuredContent is not None
         assert "binary_base64" in result.structuredContent
 
     async def test_preview_nonexistent(self, ctx: KaosContext) -> None:
         tool = PreviewSourceTool()
-        result = await tool.execute({"path": "/nonexistent/file.txt"}, ctx)
+        result = await tool.execute({"path": "file:///nonexistent/file.txt"}, ctx)
         assert result.isError
         assert "not found" in (result.text or "").lower()
 
     async def test_preview_directory(self, ctx: KaosContext, sample_dir: Path) -> None:
         tool = PreviewSourceTool()
-        result = await tool.execute({"path": str(sample_dir)}, ctx)
+        result = await tool.execute({"path": sample_dir.as_uri()}, ctx)
         assert result.isError
         assert "kaos-source-discover" in (result.text or "")
 
@@ -412,31 +412,31 @@ class TestPreviewSource:
 class TestMaterializeSource:
     async def test_materialize_file(self, ctx: KaosContext, sample_file: Path) -> None:
         tool = MaterializeSourceTool()
-        result = await tool.execute({"path": str(sample_file)}, ctx)
+        result = await tool.execute({"path": sample_file.as_uri()}, ctx)
         assert not result.isError
         assert result.structuredContent is not None
         assert "artifact_id" in result.structuredContent
 
     async def test_materialize_with_name(self, ctx: KaosContext, sample_file: Path) -> None:
         tool = MaterializeSourceTool()
-        result = await tool.execute({"path": str(sample_file), "name": "my-artifact"}, ctx)
+        result = await tool.execute({"path": sample_file.as_uri(), "name": "my-artifact"}, ctx)
         assert not result.isError
 
     async def test_materialize_nonexistent(self, ctx: KaosContext) -> None:
         tool = MaterializeSourceTool()
-        result = await tool.execute({"path": "/nonexistent/file.txt"}, ctx)
+        result = await tool.execute({"path": "file:///nonexistent/file.txt"}, ctx)
         assert result.isError
         assert "not found" in (result.text or "").lower()
 
     async def test_materialize_directory(self, ctx: KaosContext, sample_dir: Path) -> None:
         tool = MaterializeSourceTool()
-        result = await tool.execute({"path": str(sample_dir)}, ctx)
+        result = await tool.execute({"path": sample_dir.as_uri()}, ctx)
         assert result.isError
         assert "directory" in (result.text or "").lower()
 
     async def test_materialize_no_context(self, sample_file: Path) -> None:
         tool = MaterializeSourceTool()
-        result = await tool.execute({"path": str(sample_file)}, context=None)
+        result = await tool.execute({"path": sample_file.as_uri()}, context=None)
         assert result.isError
         assert "runtime" in (result.text or "").lower()
 
@@ -473,7 +473,7 @@ class TestFetchURL:
 class TestInspectArchive:
     async def test_inspect_zip(self, ctx: KaosContext, sample_archive: Path) -> None:
         tool = InspectArchiveTool()
-        result = await tool.execute({"path": str(sample_archive)}, ctx)
+        result = await tool.execute({"path": sample_archive.as_uri()}, ctx)
         assert not result.isError
         assert result.structuredContent is not None
         assert result.structuredContent["count"] >= 2
@@ -482,7 +482,7 @@ class TestInspectArchive:
 
     async def test_inspect_with_pattern(self, ctx: KaosContext, sample_archive: Path) -> None:
         tool = InspectArchiveTool()
-        result = await tool.execute({"path": str(sample_archive), "patterns": ["*.csv"]}, ctx)
+        result = await tool.execute({"path": sample_archive.as_uri(), "patterns": ["*.csv"]}, ctx)
         assert not result.isError
         assert result.structuredContent is not None
         names = [m["name"] for m in result.structuredContent["members"]]
@@ -491,19 +491,19 @@ class TestInspectArchive:
 
     async def test_inspect_nonexistent(self, ctx: KaosContext) -> None:
         tool = InspectArchiveTool()
-        result = await tool.execute({"path": "/nonexistent/test.zip"}, ctx)
+        result = await tool.execute({"path": "file:///nonexistent/test.zip"}, ctx)
         assert result.isError
         assert "not found" in (result.text or "").lower()
 
     async def test_inspect_directory(self, ctx: KaosContext, sample_dir: Path) -> None:
         tool = InspectArchiveTool()
-        result = await tool.execute({"path": str(sample_dir)}, ctx)
+        result = await tool.execute({"path": sample_dir.as_uri()}, ctx)
         assert result.isError
         assert "kaos-source-discover" in (result.text or "")
 
     async def test_inspect_with_limit(self, ctx: KaosContext, sample_archive: Path) -> None:
         tool = InspectArchiveTool()
-        result = await tool.execute({"path": str(sample_archive), "limit": 1}, ctx)
+        result = await tool.execute({"path": sample_archive.as_uri(), "limit": 1}, ctx)
         assert not result.isError
         assert result.structuredContent is not None
         assert len(result.structuredContent["members"]) == 1
@@ -519,26 +519,26 @@ class TestErrorMessages:
 
     async def test_discover_error_has_guidance(self, ctx: KaosContext) -> None:
         tool = DiscoverSourcesTool()
-        result = await tool.execute({"path": "/nonexistent"}, ctx)
+        result = await tool.execute({"path": "file:///nonexistent"}, ctx)
         assert result.isError
         text = result.text or ""
         assert "verify" in text.lower() or "path" in text.lower()
 
     async def test_describe_dir_suggests_discover(self, ctx: KaosContext, sample_dir: Path) -> None:
         tool = DescribeSourceTool()
-        result = await tool.execute({"path": str(sample_dir)}, ctx)
+        result = await tool.execute({"path": sample_dir.as_uri()}, ctx)
         assert result.isError
         assert "kaos-source-discover" in (result.text or "")
 
     async def test_preview_dir_suggests_discover(self, ctx: KaosContext, sample_dir: Path) -> None:
         tool = PreviewSourceTool()
-        result = await tool.execute({"path": str(sample_dir)}, ctx)
+        result = await tool.execute({"path": sample_dir.as_uri()}, ctx)
         assert result.isError
         assert "kaos-source-discover" in (result.text or "")
 
     async def test_materialize_no_ctx_suggests_preview(self, sample_file: Path) -> None:
         tool = MaterializeSourceTool()
-        result = await tool.execute({"path": str(sample_file)}, context=None)
+        result = await tool.execute({"path": sample_file.as_uri()}, context=None)
         assert result.isError
         assert "kaos-source-preview" in (result.text or "")
 

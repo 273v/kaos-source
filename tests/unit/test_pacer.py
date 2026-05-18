@@ -123,7 +123,7 @@ class TestParser:
 class TestParseTool:
     async def test_parse_docket(self, docket_path: Path) -> None:
         tool = PacerParseDocketTool()
-        result = await tool.execute({"path": str(docket_path)})
+        result = await tool.execute({"path": docket_path.as_uri()})
         assert not result.isError
         assert result.structuredContent is not None
         assert result.structuredContent["case_number"]
@@ -132,7 +132,7 @@ class TestParseTool:
 
     async def test_file_not_found(self) -> None:
         tool = PacerParseDocketTool()
-        result = await tool.execute({"path": "/nonexistent/docket.html"})
+        result = await tool.execute({"path": "file:///nonexistent/docket.html"})
         assert result.isError
         assert "not found" in (result.text or "").lower()
 
@@ -147,7 +147,7 @@ class TestFilterTool:
         tool = PacerFilterEntriesTool()
         result = await tool.execute(
             {
-                "path": str(docket_path),
+                "path": docket_path.as_uri(),
                 "entry_type": "Motion",
             }
         )
@@ -161,7 +161,7 @@ class TestFilterTool:
         tool = PacerFilterEntriesTool()
         result = await tool.execute(
             {
-                "path": str(docket_path),
+                "path": docket_path.as_uri(),
                 "text_search": "complaint",
             }
         )
@@ -171,7 +171,7 @@ class TestFilterTool:
         tool = PacerFilterEntriesTool()
         result = await tool.execute(
             {
-                "path": str(docket_path),
+                "path": docket_path.as_uri(),
                 "has_documents": True,
             }
         )
