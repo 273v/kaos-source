@@ -285,7 +285,7 @@ class TestMCPStdio:
             {
                 "name": "kaos-source-describe",
                 "arguments": {
-                    "path": str(Path("pyproject.toml").resolve()),
+                    "path": Path("pyproject.toml").resolve().as_uri(),
                 },
             },
             msg_id=6,
@@ -303,7 +303,7 @@ class TestMCPStdio:
             "tools/call",
             {
                 "name": "kaos-source-describe",
-                "arguments": {"path": "/nonexistent/file.txt"},
+                "arguments": {"path": "file:///nonexistent/file.txt"},
             },
             msg_id=7,
         )

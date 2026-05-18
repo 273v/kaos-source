@@ -480,12 +480,18 @@ class TestPacerBattle:
         if not Path(self._FIXTURE).exists():
             pytest.skip("PACER fixture not available")
 
+    @property
+    def _fixture_uri(self) -> str:
+        from pathlib import Path
+
+        return Path(self._FIXTURE).resolve().as_uri()
+
     async def test_parse_full_docket(self) -> None:
         """Agent: 'Parse this PACER docket file and summarize the case'"""
         from kaos_source.parsers.pacer.tools import PacerParseDocketTool
 
         tool = PacerParseDocketTool()
-        result = await tool.execute({"path": self._FIXTURE})
+        result = await tool.execute({"path": self._fixture_uri})
         assert not result.isError
         sc = result.structuredContent
         assert sc is not None
@@ -504,7 +510,7 @@ class TestPacerBattle:
         tool = PacerFilterEntriesTool()
         result = await tool.execute(
             {
-                "path": self._FIXTURE,
+                "path": self._fixture_uri,
                 "entry_type": "Motion",
             }
         )
@@ -521,7 +527,7 @@ class TestPacerBattle:
         tool = PacerFilterEntriesTool()
         result = await tool.execute(
             {
-                "path": self._FIXTURE,
+                "path": self._fixture_uri,
                 "has_documents": True,
             }
         )
@@ -548,7 +554,7 @@ class TestSourceBattle:
         tool = DiscoverSourcesTool()
         result = await tool.execute(
             {
-                "path": str(_PACKAGE_DIR),
+                "path": _PACKAGE_DIR.as_uri(),
                 "patterns": ["*.py"],
                 "limit": 100,
             }
@@ -567,7 +573,7 @@ class TestSourceBattle:
         tool = PreviewSourceTool()
         result = await tool.execute(
             {
-                "path": str(_PYPROJECT),
+                "path": _PYPROJECT.as_uri(),
                 "max_bytes": 512,
             }
         )
@@ -583,7 +589,7 @@ class TestSourceBattle:
         tool = DescribeSourceTool()
         result = await tool.execute(
             {
-                "path": str(_PYPROJECT),
+                "path": _PYPROJECT.as_uri(),
             }
         )
         assert not result.isError

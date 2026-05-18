@@ -244,7 +244,7 @@ class TestVCardParseTool:
         vcf = tmp_path / "test.vcf"
         vcf.write_text(SIMPLE_VCARD, encoding="utf-8")
         tool = _get_vcard_tool()
-        result = await tool.execute({"path": str(vcf)})
+        result = await tool.execute({"path": vcf.as_uri()})
         assert not result.isError
         data = result.require_structured()
         assert data["vcard"]["formatted_name"] == "Jane Doe"
@@ -266,5 +266,5 @@ class TestVCardParseTool:
 
     async def test_file_not_found(self) -> None:
         tool = _get_vcard_tool()
-        result = await tool.execute({"path": "/nonexistent/file.vcf"})
+        result = await tool.execute({"path": "file:///nonexistent/file.vcf"})
         assert result.isError

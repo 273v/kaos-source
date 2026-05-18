@@ -186,7 +186,7 @@ class TestForensicToolMetadata:
 @pytest.mark.asyncio
 class TestParseEmlTool:
     async def test_parse_eml(self, sample_eml: Path) -> None:
-        result = await TOOLS["kaos-source-parse-eml"].execute({"path": str(sample_eml)})
+        result = await TOOLS["kaos-source-parse-eml"].execute({"path": sample_eml.as_uri()})
         assert not result.isError
         data = result.require_structured()
 
@@ -215,7 +215,7 @@ class TestParseEmlTool:
         assert data["attachments"][0]["md5"] is not None
 
     async def test_file_not_found(self) -> None:
-        result = await TOOLS["kaos-source-parse-eml"].execute({"path": "/nonexistent.eml"})
+        result = await TOOLS["kaos-source-parse-eml"].execute({"path": "file:///nonexistent.eml"})
         assert result.isError
 
 
@@ -227,7 +227,7 @@ class TestParseMboxTool:
     async def test_parse_mbox(self, sample_mbox: Path) -> None:
         result = await TOOLS["kaos-source-parse-mbox"].execute(
             {
-                "path": str(sample_mbox),
+                "path": sample_mbox.as_uri(),
                 "limit": 2,
             }
         )
@@ -248,7 +248,7 @@ class TestEmailForensicsTool:
     async def test_forensics_from_file(self, sample_eml: Path) -> None:
         result = await TOOLS["kaos-source-email-forensics"].execute(
             {
-                "path": str(sample_eml),
+                "path": sample_eml.as_uri(),
             }
         )
         assert not result.isError
@@ -280,7 +280,7 @@ class TestImageMetadataTool:
     async def test_image_with_exif(self, sample_image_with_exif: Path) -> None:
         result = await TOOLS["kaos-source-image-metadata"].execute(
             {
-                "path": str(sample_image_with_exif),
+                "path": sample_image_with_exif.as_uri(),
             }
         )
         assert not result.isError
@@ -299,7 +299,9 @@ class TestImageMetadataTool:
         assert data["copyright"] == "2025 John Photographer"
 
     async def test_file_not_found(self) -> None:
-        result = await TOOLS["kaos-source-image-metadata"].execute({"path": "/nonexistent.jpg"})
+        result = await TOOLS["kaos-source-image-metadata"].execute(
+            {"path": "file:///nonexistent.jpg"}
+        )
         assert result.isError
 
 
@@ -311,7 +313,7 @@ class TestFileMetadataTool:
     async def test_text_file(self, sample_text_file: Path) -> None:
         result = await TOOLS["kaos-source-file-metadata"].execute(
             {
-                "path": str(sample_text_file),
+                "path": sample_text_file.as_uri(),
             }
         )
         assert not result.isError
@@ -331,7 +333,7 @@ class TestFileMetadataTool:
     async def test_pdf_magic_bytes(self, sample_pdf_file: Path) -> None:
         result = await TOOLS["kaos-source-file-metadata"].execute(
             {
-                "path": str(sample_pdf_file),
+                "path": sample_pdf_file.as_uri(),
             }
         )
         assert not result.isError
@@ -344,13 +346,13 @@ class TestFileMetadataTool:
     async def test_checksum_determinism(self, sample_text_file: Path) -> None:
         """Same file should always produce same checksums."""
         tool = TOOLS["kaos-source-file-metadata"]
-        r1 = await tool.execute({"path": str(sample_text_file)})
-        r2 = await tool.execute({"path": str(sample_text_file)})
+        r1 = await tool.execute({"path": sample_text_file.as_uri()})
+        r2 = await tool.execute({"path": sample_text_file.as_uri()})
         d1 = r1.require_structured()
         d2 = r2.require_structured()
         assert d1["md5"] == d2["md5"]
         assert d1["sha256"] == d2["sha256"]
 
     async def test_file_not_found(self) -> None:
-        result = await TOOLS["kaos-source-file-metadata"].execute({"path": "/nonexistent"})
+        result = await TOOLS["kaos-source-file-metadata"].execute({"path": "file:///nonexistent"})
         assert result.isError
