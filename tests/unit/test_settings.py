@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from kaos_source.settings import KaosSourceBrowserSettings, KaosSourceHttpSettings
+from kaos_source.settings.http import DEFAULT_BROWSER_HEADERS, DEFAULT_HTTP_UA
 
 
 class _FakeContext:
@@ -30,10 +31,43 @@ class TestHttpSettingsDefaults:
         assert s.max_concurrent_per_domain == 2
         assert s.min_interval_seconds == 0.0
         assert s.headers is None
-        assert s.user_agent == "kaos-source/0.1"
+        # Issue #444 — realistic Chrome UA by default so hosts that
+        # block obvious bot UAs still serve the page.
+        assert s.user_agent == DEFAULT_HTTP_UA
+        assert "Chrome/" in s.user_agent
+        assert "Mozilla/5.0" in s.user_agent
         assert s.verify_ssl is True
         assert s.follow_redirects is True
         assert s.http2 is False
+        # Per-domain overrides default empty; browser fallback opt-in by default.
+        assert s.domain_overrides is None
+        assert s.enable_browser_fallback is True
+
+
+class TestHttpSettingsAntiBotDefaults:
+    """Issue #444 — defaults for the anti-bot fetch hardening."""
+
+    def test_default_browser_headers_present(self) -> None:
+        # These are the headers the connector layers under any
+        # user-provided override; surface the constant so callers
+        # can introspect what gets sent.
+        assert "Accept" in DEFAULT_BROWSER_HEADERS
+        assert "Accept-Language" in DEFAULT_BROWSER_HEADERS
+        assert DEFAULT_BROWSER_HEADERS["Sec-Fetch-Mode"] == "navigate"
+
+    def test_domain_overrides_round_trip(self) -> None:
+        s = KaosSourceHttpSettings(
+            domain_overrides={
+                "reuters.com": {"User-Agent": "Custom/1.0", "Accept": "text/html"},
+            }
+        )
+        assert s.domain_overrides is not None
+        assert s.domain_overrides["reuters.com"]["User-Agent"] == "Custom/1.0"
+
+    def test_browser_fallback_env_toggle(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("KAOS_SOURCE_HTTP_ENABLE_BROWSER_FALLBACK", "0")
+        s = KaosSourceHttpSettings()
+        assert s.enable_browser_fallback is False
 
 
 class TestRetryBackoffSettings:

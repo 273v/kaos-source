@@ -25,6 +25,7 @@ from kaos_source.connectors.base import (
 )
 from kaos_source.errors import (
     SourceAccessError,
+    SourceAntiBotChallengeError,
     SourceMaterializationError,
     SourceNotFoundError,
     SourcePolicyError,
@@ -44,6 +45,7 @@ from kaos_source.options import (
     SourceMaterializeOptions,
     SourcePreviewOptions,
 )
+from kaos_source.settings.http import DEFAULT_BROWSER_HEADERS, DEFAULT_HTTP_UA
 
 logger = get_logger(__name__)
 
@@ -59,6 +61,38 @@ _DEFAULT_ALLOWED_HEADERS = (
 _RETRYABLE_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
 _HEAD_FALLBACK_STATUS_CODES = {403, 405, 501}
 
+# Issue #444 — explicit anti-bot/refusal HTTP status codes that should
+# trigger the Playwright fallback path even if the body is empty.
+_ANTI_BOT_STATUS_CODES = {403, 451}
+
+# Substrings (lowercased) we look for in the first ``_FINGERPRINT_SNIFF_BYTES``
+# of an HTML response body to flag an anti-bot interstitial. Each tuple
+# is ``(label, needle)``; the label is surfaced in the structured error
+# so operators can audit false positives.
+#
+# Keep the needles narrow on purpose — broad strings like ``"bot"`` or
+# ``"verify"`` would false-positive on legitimate cybersecurity, fraud,
+# and authentication content. Every needle here is a phrase that
+# Cloudflare / Akamai / hCaptcha / reCAPTCHA / DataDome / PerimeterX
+# interstitials emit verbatim.
+_ANTI_BOT_FINGERPRINTS: tuple[tuple[str, str], ...] = (
+    ("cloudflare_just_a_moment", "<title>just a moment..."),
+    ("cloudflare_challenge", "checking your browser before accessing"),
+    ("cloudflare_attention", "attention required! | cloudflare"),
+    ("cloudflare_ray", "cloudflare ray id:"),
+    ("cf_chl", "cf-chl-bypass"),
+    ("hcaptcha", "hcaptcha-challenge"),
+    ("recaptcha_solve", "please solve the captcha"),
+    ("recaptcha_challenge", 'class="g-recaptcha"'),
+    ("perimeterx", "px-captcha"),
+    ("datadome", "datadome-captcha"),
+    ("akamai_bm", "<title>access denied</title>"),
+    ("generic_captcha_title", "<title>captcha</title>"),
+)
+
+# Only sniff the first chunk — challenge HTML is always tiny.
+_FINGERPRINT_SNIFF_BYTES = 16_384
+
 
 class HttpConnector(SourceConnector):
     kind = SourceKind.HTTP
@@ -70,7 +104,7 @@ class HttpConnector(SourceConnector):
         transport: httpx.AsyncBaseTransport | None = None,
         max_concurrent_per_domain: int = 2,
         header_allowlist: tuple[str, ...] = _DEFAULT_ALLOWED_HEADERS,
-        user_agent: str = "kaos-source/0.1",
+        user_agent: str = DEFAULT_HTTP_UA,
         verify_ssl: bool = True,
         follow_redirects: bool = True,
         http2: bool = False,
@@ -96,7 +130,7 @@ class HttpConnector(SourceConnector):
         overrides: dict[str, Any] = {}
         if self._max_concurrent_per_domain != 2:
             overrides["max_concurrent_per_domain"] = self._max_concurrent_per_domain
-        if self._user_agent != "kaos-source/0.1":
+        if self._user_agent != DEFAULT_HTTP_UA:
             overrides["user_agent"] = self._user_agent
         if not self._verify_ssl:
             overrides["verify_ssl"] = self._verify_ssl
@@ -121,9 +155,11 @@ class HttpConnector(SourceConnector):
                 )
                 range_headers = {"range": "bytes=0-0"}
                 get_response = await client.request("GET", url, headers=range_headers)
+                self._raise_for_anti_bot_status(get_response, url)
                 self._raise_for_status(get_response, url)
                 return self._descriptor_from_response(locator, get_response)
 
+            self._raise_for_anti_bot_status(head_response, url)
             self._raise_for_status(head_response, url)
             return self._descriptor_from_response(locator, head_response)
 
@@ -183,6 +219,7 @@ class HttpConnector(SourceConnector):
 
         async def load(client: httpx.AsyncClient) -> SourceMaterialization:
             async with client.stream("GET", url) as response:
+                self._raise_for_anti_bot_status(response, url)
                 self._raise_for_status(response, url)
                 descriptor = self._descriptor_from_response(locator, response)
                 return await self._materialize_response(
@@ -226,7 +263,7 @@ class HttpConnector(SourceConnector):
                 try:
                     async with httpx.AsyncClient(
                         follow_redirects=s.follow_redirects,
-                        headers=self._request_headers(s),
+                        headers=self._request_headers(s, url=url),
                         verify=s.verify_ssl,
                         http2=s.http2,
                         timeout=timeout,
@@ -369,15 +406,74 @@ class HttpConnector(SourceConnector):
                     self._domain_last_request_at[domain] = time.monotonic()
             yield
 
-    def _request_headers(self, s: Any) -> dict[str, str]:
-        """Build request headers from constructor defaults and typed settings."""
-        headers = dict(self._default_headers)
+    def _request_headers(self, s: Any, *, url: str | None = None) -> dict[str, str]:
+        """Build request headers from connector + typed-settings + per-domain overrides.
+
+        Layering (later layers win):
+
+        1. ``DEFAULT_BROWSER_HEADERS`` — Accept / Accept-Language /
+           Sec-Fetch-* paired with the realistic Chrome UA so the
+           default request shape isn't an obvious bot.
+        2. Constructor ``default_headers``.
+        3. ``s.headers`` (typed settings global headers).
+        4. ``User-Agent`` from ``s.user_agent``.
+        5. Per-domain overrides from ``s.domain_overrides`` (issue #444)
+           — keyed by host suffix match. These win because they're the
+           most specific layer.
+        6. ``X-Kaos-Source`` is forced on so an operator's outbound log
+           can always attribute traffic to this connector.
+        """
+        headers: dict[str, str] = dict(DEFAULT_BROWSER_HEADERS)
+        headers.update(self._default_headers)
         configured_headers = s.headers
         if isinstance(configured_headers, Mapping):
             headers.update({str(key): str(value) for key, value in configured_headers.items()})
         headers["User-Agent"] = s.user_agent
-        headers.setdefault("X-Kaos-Source", "1")
+
+        # Per-domain overrides apply last so they beat the global UA / Accept.
+        if url is not None:
+            domain_headers = self._domain_overrides_for(url, s)
+            if domain_headers:
+                headers.update(domain_headers)
+
+        headers["X-Kaos-Source"] = "1"
         return headers
+
+    @staticmethod
+    def _domain_overrides_for(url: str, s: Any) -> dict[str, str]:
+        """Resolve per-domain header overrides for ``url`` against settings.
+
+        Matching is suffix-based on the URL hostname:
+
+        - exact match (``"reuters.com"`` matches ``"reuters.com"``)
+        - subdomain match (``"reuters.com"`` matches ``"www.reuters.com"``
+          and ``"feeds.reuters.com"``)
+
+        On ambiguous matches the longest key wins so a more specific
+        override (``"investor.example.com"``) beats a broader one
+        (``"example.com"``).
+        """
+        overrides_map = getattr(s, "domain_overrides", None) or {}
+        if not overrides_map:
+            return {}
+        host = (urlsplit(url).hostname or "").lower()
+        if not host:
+            return {}
+        matched: tuple[str, dict[str, str]] | None = None
+        for raw_key, raw_value in overrides_map.items():
+            if not isinstance(raw_value, Mapping):
+                continue
+            key = str(raw_key).lower().lstrip(".")
+            if not key:
+                continue
+            if (host == key or host.endswith("." + key)) and (
+                matched is None or len(key) > len(matched[0])
+            ):
+                matched = (
+                    key,
+                    {str(name): str(value) for name, value in raw_value.items()},
+                )
+        return matched[1] if matched is not None else {}
 
     def _retry_delay_seconds(
         self, attempt: int, details: Mapping[str, object], settings: Any
@@ -462,6 +558,9 @@ class HttpConnector(SourceConnector):
 
         bytes_written = 0
         expected_size = descriptor.size
+        # Issue #444 — only sniff HTML bodies, since challenge pages
+        # are always HTML. Saves CPU on PDF / ZIP / image responses.
+        sniff_for_antibot = self._is_html_like(descriptor.mime_type)
         try:
             if target_disk_path is not None:
                 bytes_written = await self._write_response_to_disk(
@@ -469,10 +568,18 @@ class HttpConnector(SourceConnector):
                     target_disk_path,
                     context=context,
                     total_size=expected_size,
+                    url=str(descriptor.locator.uri),
+                    status_code=response.status_code,
+                    sniff_for_antibot=sniff_for_antibot,
                 )
             else:
                 payload = await self._read_response_bytes(
-                    response, context=context, total_size=expected_size
+                    response,
+                    context=context,
+                    total_size=expected_size,
+                    url=str(descriptor.locator.uri),
+                    status_code=response.status_code,
+                    sniff_for_antibot=sniff_for_antibot,
                 )
                 bytes_written = len(payload)
                 await context.vfs.write(
@@ -521,14 +628,39 @@ class HttpConnector(SourceConnector):
         *,
         context: KaosContext,
         total_size: int | None,
+        url: str,
+        status_code: int,
+        sniff_for_antibot: bool,
     ) -> int:
         target_path.parent.mkdir(parents=True, exist_ok=True)
         written = 0
+        sniff_buffer = bytearray()
+        sniffed = not sniff_for_antibot
         with target_path.open("wb") as handle:
             async for chunk in response.aiter_bytes():
+                if not sniffed:
+                    sniff_buffer.extend(chunk)
+                    if len(sniff_buffer) >= _FINGERPRINT_SNIFF_BYTES:
+                        self._check_antibot_body(
+                            bytes(sniff_buffer),
+                            url=url,
+                            status_code=status_code,
+                            target_path=target_path,
+                        )
+                        sniffed = True
                 handle.write(chunk)
                 written += len(chunk)
                 await context.report_progress(written, total_size, f"Downloading {response.url}")
+        # Stream ended before we hit the sniff threshold — check the
+        # buffer we did collect (the whole body, for tiny challenge
+        # pages typical of Cloudflare interstitials).
+        if not sniffed:
+            self._check_antibot_body(
+                bytes(sniff_buffer),
+                url=url,
+                status_code=status_code,
+                target_path=target_path,
+            )
         return written
 
     async def _read_response_bytes(
@@ -537,12 +669,82 @@ class HttpConnector(SourceConnector):
         *,
         context: KaosContext,
         total_size: int | None,
+        url: str,
+        status_code: int,
+        sniff_for_antibot: bool,
     ) -> bytes:
         payload = bytearray()
+        sniffed = not sniff_for_antibot
         async for chunk in response.aiter_bytes():
             payload.extend(chunk)
+            if not sniffed and len(payload) >= _FINGERPRINT_SNIFF_BYTES:
+                self._check_antibot_body(
+                    bytes(payload[:_FINGERPRINT_SNIFF_BYTES]),
+                    url=url,
+                    status_code=status_code,
+                )
+                sniffed = True
             await context.report_progress(len(payload), total_size, f"Downloading {response.url}")
+        if not sniffed:
+            self._check_antibot_body(bytes(payload), url=url, status_code=status_code)
         return bytes(payload)
+
+    @staticmethod
+    def _is_html_like(mime_type: str | None) -> bool:
+        if not mime_type:
+            return False
+        mt = mime_type.lower()
+        return mt.startswith("text/html") or mt.startswith("application/xhtml")
+
+    @staticmethod
+    def _check_antibot_body(
+        body: bytes,
+        *,
+        url: str,
+        status_code: int,
+        target_path: Path | None = None,
+    ) -> None:
+        """Raise :class:`SourceAntiBotChallengeError` if ``body`` matches a fingerprint.
+
+        On match we also unlink ``target_path`` (if provided) so the
+        partially written challenge HTML doesn't get materialised as
+        an artifact — the caller's Playwright fallback will overwrite it.
+        """
+        try:
+            sample = body.decode("utf-8", errors="ignore").lower()
+        except Exception:  # pragma: no cover — bytes.decode with errors="ignore" cannot raise
+            return
+        for label, needle in _ANTI_BOT_FINGERPRINTS:
+            if needle in sample:
+                if target_path is not None:
+                    try:
+                        target_path.unlink(missing_ok=True)
+                    except OSError:  # pragma: no cover — best-effort cleanup
+                        logger.debug("Anti-bot cleanup: could not unlink %s", target_path)
+                raise SourceAntiBotChallengeError(
+                    "HTTP source returned an anti-bot challenge body",
+                    locator=url,
+                    http_status=status_code,
+                    fingerprint=label,
+                )
+
+    @staticmethod
+    def _raise_for_anti_bot_status(response: httpx.Response, url: str) -> None:
+        """Convert explicit anti-bot HTTP refusals (403, 451) into a structured signal.
+
+        Issue #444 — these codes are commonly emitted by hosts that
+        decline to serve obvious bot traffic (Reuters, Bloomberg) or
+        that are geofenced (451 = Unavailable For Legal Reasons). The
+        FetchURL tool catches this and tries Playwright; if the host
+        also refuses Playwright the error surfaces to the agent.
+        """
+        if response.status_code in _ANTI_BOT_STATUS_CODES:
+            raise SourceAntiBotChallengeError(
+                "HTTP source returned an anti-bot refusal status",
+                locator=url,
+                http_status=response.status_code,
+                fingerprint=f"http_{response.status_code}",
+            )
 
     def _filtered_headers(self, headers: Mapping[str, str]) -> dict[str, str]:
         return {

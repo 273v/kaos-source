@@ -66,6 +66,7 @@ from kaos_source.connectors import (
 )
 from kaos_source.errors import (
     SourceAccessError,
+    SourceAntiBotChallengeError,
     SourceError,
     SourceErrorInfo,
     SourceMaterializationError,
@@ -128,6 +129,7 @@ __all__ = [
     "ParserRegistry",
     "ReadableBinaryStream",
     "SourceAccessError",
+    "SourceAntiBotChallengeError",
     "SourceCapability",
     "SourceConnector",
     "SourceDescriptor",

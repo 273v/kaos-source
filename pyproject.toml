@@ -132,10 +132,14 @@ addopts = [
   "--cov=kaos_source",
   "--cov-branch",
   "--cov-report=term-missing",
+  "-m",
+  "not live and not requires_browser",
 ]
 markers = [
   "integration: end-to-end behavior checks",
   "unit: focused unit checks",
+  "live: tests that hit the real public internet (deselected by default)",
+  "requires_browser: tests that require the [browser] extra + Playwright runtime",
 ]
 
 [tool.coverage.run]

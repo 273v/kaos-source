@@ -520,8 +520,12 @@ class FetchURLTool(KaosTool):
             display_name="Fetch URL",
             description=(
                 "Fetch content from an HTTP/HTTPS URL and materialize it as an artifact. "
-                "Returns metadata and artifact ID. For web page extraction with readability "
-                "and HTML-to-AST, use kaos-web tools instead."
+                "Returns metadata and artifact ID. Sends a realistic desktop Chrome "
+                "User-Agent + browser-shaped headers by default; on anti-bot refusals "
+                "(HTTP 403/451 or Cloudflare/captcha challenge HTML) falls back to a "
+                "Playwright-driven fetch when the [browser] extra is installed. "
+                "For web page extraction with readability and HTML-to-AST, use "
+                "kaos-web tools instead."
             ),
             category=ToolCategory.DATA,
             capability=ToolCapability.EXTRACT,
@@ -582,8 +586,32 @@ class FetchURLTool(KaosTool):
         service = _get_service()
         options = SourceMaterializeOptions(artifact_name=inputs.get("name"))
 
+        from kaos_source.errors import SourceAntiBotChallengeError
+        from kaos_source.settings import KaosSourceHttpSettings
+
         try:
             result = await service.materialize(locator, context, options)
+        except SourceAntiBotChallengeError as exc:
+            # Issue #444 — host either returned an explicit refusal
+            # status (403 / 451) or HTML matching a known anti-bot
+            # interstitial fingerprint. Fall back to a Playwright
+            # browser fetch if the operator opted in.
+            http_settings = KaosSourceHttpSettings.from_context(context)
+            if not http_settings.enable_browser_fallback:
+                return ToolResult.create_error(
+                    f"Fetch failed for '{url}': blocked by anti-bot challenge "
+                    f"(fingerprint={exc.details.get('fingerprint')!r}, "
+                    f"http_status={exc.details.get('http_status')}). "
+                    "Browser fallback is disabled "
+                    "(KAOS_SOURCE_HTTP_ENABLE_BROWSER_FALLBACK=0). "
+                    "Re-enable it or use kaos-web browser tools."
+                )
+            return await self._fetch_via_browser(
+                url=url,
+                inputs=inputs,
+                context=context,
+                trigger=exc,
+            )
         except Exception as exc:
             return ToolResult.create_error(
                 f"Fetch failed for '{url}': {exc}. "
@@ -601,6 +629,83 @@ class FetchURLTool(KaosTool):
                 "size": result.descriptor.size,
                 "bytes_written": result.bytes_written,
                 "body_uri": result.manifest.body_uri,
+                "fetch_path": "httpx",
+            },
+        )
+
+    async def _fetch_via_browser(
+        self,
+        *,
+        url: str,
+        inputs: dict[str, Any],
+        context: KaosContext,
+        trigger: Any,
+    ) -> ToolResult:
+        """Playwright fallback path for the FetchURL tool.
+
+        Builds a one-shot :class:`BrowserConnector`-backed service,
+        re-runs ``materialize`` against the same URL, and surfaces a
+        clear error if the optional ``[browser]`` extra isn't
+        installed (the Playwright import fails inside the connector).
+        """
+        fp_value = "anti-bot"
+        details = getattr(trigger, "details", None)
+        if isinstance(details, dict):
+            raw_fp = details.get("fingerprint")
+            if isinstance(raw_fp, str):
+                fp_value = raw_fp
+
+        try:
+            import importlib
+
+            importlib.import_module("playwright.async_api")
+        except ImportError:
+            return ToolResult.create_error(
+                f"Fetch failed for '{url}': blocked by anti-bot challenge "
+                f"(fingerprint={fp_value!r}). Playwright is required to bypass "
+                "this kind of refusal, but the [browser] extra is not "
+                "installed.\n\n"
+                "Install it with:\n\n"
+                "    pip install 'kaos-source[browser]'\n"
+                "    python -m playwright install chromium\n\n"
+                "Then retry the same kaos-source-fetch-url call. The "
+                "host can still legitimately refuse Playwright; if so, "
+                "the next error will state that explicitly."
+            )
+
+        from kaos_source.connectors.browser import BrowserConnector
+        from kaos_source.models import SourceLocator
+        from kaos_source.options import SourceMaterializeOptions
+        from kaos_source.runtime.service import SourceService
+
+        browser_service = SourceService(connectors=[BrowserConnector()])
+        browser_locator = SourceLocator.browser(url)
+        options = SourceMaterializeOptions(artifact_name=inputs.get("name"))
+
+        try:
+            result = await browser_service.materialize(browser_locator, context, options)
+        except Exception as exc:
+            return ToolResult.create_error(
+                f"Fetch failed for '{url}': httpx hit an anti-bot challenge "
+                f"(fingerprint={fp_value!r}) and the Playwright fallback also "
+                f"failed: {exc}. The host may be blocking automated access "
+                "regardless of browser type, or Playwright's browser binaries "
+                "may not be installed (run `python -m playwright install chromium`)."
+            )
+
+        return result.manifest.to_tool_result(
+            summary=f"Fetched {browser_locator.name} via browser fallback "
+            f"({_format_size(result.bytes_written)})",
+            structured_content={
+                "artifact_id": result.artifact_ref.artifact_id,
+                "url": url,
+                "name": result.descriptor.name,
+                "mime_type": result.descriptor.mime_type,
+                "size": result.descriptor.size,
+                "bytes_written": result.bytes_written,
+                "body_uri": result.manifest.body_uri,
+                "fetch_path": "playwright",
+                "fallback_reason": fp_value,
             },
         )
 
