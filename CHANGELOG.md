@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-05-20
+
+### Changed — WU-L of 0.1.0 GA plan
+
+- 0.1.0 GA — WU-L of the 0.1.0 GA plan. First stable release of
+  `kaos-source`. The public API is frozen for the 0.1.x line: no
+  breaking changes will land until 0.2.0. Runtime `kaos-core` and
+  `[content]` extra / dev-group `kaos-nlp-core` pins raised from
+  `>=0.1.0rc1,<0.2` to `>=0.1.0,<0.2`. `kaos-content[html]` floor
+  stays at `>=0.1.0a2` (already permissive enough to pick up the
+  0.1.0 GA release). No source changes vs 0.1.0rc1.
+
+
 ## [0.1.0rc1] — 2026-05-20
 
 ### Changed
