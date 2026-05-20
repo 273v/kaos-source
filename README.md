@@ -29,17 +29,17 @@ is gated behind opt-in extras (`[browser]`, `[content]`, `[pacer]`).
 ## Install
 
 ```bash
-uv add kaos-source
+uv add "kaos-source>=0.1.0"
 # or
-pip install kaos-source
+pip install "kaos-source>=0.1.0"
 ```
 
 Optional extras (all additive — none of the base functionality requires them):
 
 ```bash
-uv add 'kaos-source[browser]'   # Playwright-backed browser fetches
-uv add 'kaos-source[content]'   # parse-into-ContentDocument bridges
-uv add 'kaos-source[pacer]'     # lxml-backed PACER docket parser
+uv add 'kaos-source[browser]>=0.1.0'   # Playwright-backed browser fetches
+uv add 'kaos-source[content]>=0.1.0'   # parse-into-ContentDocument bridges
+uv add 'kaos-source[pacer]>=0.1.0'     # lxml-backed PACER docket parser
 ```
 
 `kaos-source` requires Python **3.13** or newer.
@@ -132,10 +132,19 @@ kaos-source-serve --http --port 8765                        # MCP server (stdio 
 |---|---|
 | **Python** | 3.13, 3.14 (informational matrix entries for 3.14t free-threaded and 3.15-dev) |
 | **OS** | Linux, macOS, Windows (pure-Python wheel; no native code) |
-| **Maturity** | Alpha. The public API is documented in `kaos_source.__all__` (56 symbols). |
+| **Maturity** | 0.1.0 GA. The public API is documented in `kaos_source.__all__` (56 symbols). |
 | **Stability policy** | Pre-1.0: minor bumps may change behaviour. Every change is documented in [`CHANGELOG.md`](CHANGELOG.md). The MCP tool surface, `KAOS_SOURCE_*` and `KAOS_SECURITY_*` environment-variable namespaces are public API. |
 | **Test coverage** | 411 unit tests across connectors, API clients, parsers, settings, and security regressions. Live integration tests gated behind `--include-live`. |
 | **Type checker** | Validated with [`ty`](https://docs.astral.sh/ty/), Astral's Python type checker. |
+
+## Documentation
+
+Per-package reference: see in-tree docstrings and
+[CHANGELOG.md](CHANGELOG.md).
+
+Cross-cutting KAOS guides (agentic patterns, persona presets, settings
+policy, citations, MCP data flow, migration to 0.1.0 GA) live in
+[`kaos-modules/docs/guides/`](https://github.com/273v/kaos-modules/tree/main/docs/guides).
 
 ## Companion packages
 
