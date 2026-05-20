@@ -8,6 +8,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0a10] — 2026-05-20
+
+### Added
+
+- **#444 anti-bot fetch + Playwright fallback + per-domain overrides.**
+  `kaos-source-fetch-url` now ships a realistic desktop Chrome
+  `User-Agent` (and browser-shaped `Accept` / `Accept-Language` /
+  `Sec-Fetch-*` headers) by default so hosts that block obvious bot
+  UAs (Reuters, Bloomberg, many newsrooms) still serve content on the
+  httpx path. When httpx hits an explicit refusal status (`403` /
+  `451`) or returns an HTML body matching a known anti-bot
+  interstitial fingerprint (Cloudflare "Just a moment...",
+  reCAPTCHA / hCaptcha challenge markup, DataDome, PerimeterX,
+  Akamai BM "Access Denied"), the tool falls back to a
+  `BrowserConnector`-driven Playwright fetch and reports
+  `fetch_path: "playwright"` in `structured_content`.
+
+  Playwright stays a soft dependency — install with
+  `pip install 'kaos-source[browser]'`. When the extra isn't
+  installed and the fallback would fire, the tool returns a
+  `ToolResult.create_error(...)` that names the install command and
+  the `playwright install chromium` follow-up.
+
+  New typed setting `KaosSourceHttpSettings.domain_overrides:
+  dict[str, dict[str, str]]` lets operators set per-domain header
+  overrides keyed by host suffix (e.g. `{"reuters.com": {"User-Agent":
+  "..."}}`). Longest-suffix match wins. Configurable via
+  `KAOS_SOURCE_HTTP_DOMAIN_OVERRIDES` (JSON) or context config.
+  Companion `enable_browser_fallback` (default `True`) lets operators
+  hard-disable the fallback in restricted environments.
+
+  New structured error `SourceAntiBotChallengeError` (re-exported at
+  the package root) carries `locator`, `http_status`, and
+  `fingerprint` in `details` so callers can audit triggers.
+
+### Changed
+
+- HTTP connector default `User-Agent` changed from `"kaos-source/0.1"`
+  to a realistic Chrome UA. Override via
+  `KaosSourceHttpSettings.user_agent`, `KAOS_SOURCE_HTTP_USER_AGENT`,
+  or `context.set_config("source_http_user_agent", ...)`.
+
 ## [0.1.0a9] — 2026-05-17
 
 ### Changed

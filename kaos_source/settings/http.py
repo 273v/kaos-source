@@ -16,6 +16,36 @@ from typing import Any, ClassVar, Self
 from kaos_core.config.module_settings import ModuleSettings
 from pydantic_settings import SettingsConfigDict
 
+# Realistic desktop Chrome UA used by default so hosts that block
+# obvious bot UA strings (``python-httpx``, ``kaos-source/0.1``) still
+# serve the page. Issue #444 — anti-bot fetch hardening.
+#
+# Keep this in sync with the Chrome stable channel roughly each major
+# release; lying outright (e.g. claiming Chrome 200) defeats the point
+# and can trigger different anti-bot rules.
+DEFAULT_HTTP_UA: str = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+)
+
+# Browser-shaped Accept / Accept-Language / Sec-Fetch-* defaults paired
+# with the realistic UA. Hosts that gate on UA alone are usually
+# happy with just the UA, but a meaningful chunk also gate on header
+# presence (Reuters, Bloomberg) — sending these by default reduces
+# the surface area where the Playwright fallback has to fire.
+DEFAULT_BROWSER_HEADERS: dict[str, str] = {
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,"
+        "image/avif,image/webp,image/apng,*/*;q=0.8"
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-User": "?1",
+    "Sec-Fetch-Dest": "document",
+    "Upgrade-Insecure-Requests": "1",
+}
+
 
 class KaosSourceHttpSettings(ModuleSettings):
     """Typed settings for the HTTP source connector."""
@@ -26,7 +56,7 @@ class KaosSourceHttpSettings(ModuleSettings):
     max_concurrent_per_domain: int = 2
     min_interval_seconds: float = 0.0
     headers: dict[str, str] | None = None
-    user_agent: str = "kaos-source/0.1"
+    user_agent: str = DEFAULT_HTTP_UA
     verify_ssl: bool = True
     follow_redirects: bool = True
     http2: bool = False
@@ -34,6 +64,34 @@ class KaosSourceHttpSettings(ModuleSettings):
     """Initial retry delay in seconds (exponential backoff base)."""
     retry_max_delay: float = 1.0
     """Maximum retry delay in seconds."""
+
+    domain_overrides: dict[str, dict[str, str]] | None = None
+    """Per-domain header overrides (issue #444).
+
+    Keys are host suffixes matched against the request URL's hostname
+    (e.g. ``"reuters.com"`` matches ``www.reuters.com``). Values are
+    header name/value mappings that are merged on top of the
+    connector's defaults for matching hosts. Use this to set a more
+    specific User-Agent, Accept-Language, or custom auth header for
+    a host that needs special treatment.
+
+    Example::
+
+        KaosSourceHttpSettings(
+            domain_overrides={
+                "reuters.com": {
+                    "User-Agent": "Mozilla/5.0 ... Chrome/131 ...",
+                    "Accept": "text/html",
+                },
+                "sec.gov": {
+                    "User-Agent": "Acme Research research@example.com",
+                },
+            }
+        )
+    """
+
+    enable_browser_fallback: bool = True
+    """When True, the FetchURL tool falls back to Playwright on anti-bot challenges."""
 
     model_config = SettingsConfigDict(
         env_prefix="KAOS_SOURCE_HTTP_",
