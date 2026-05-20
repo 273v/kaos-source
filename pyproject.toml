@@ -45,7 +45,7 @@ dependencies = [
   # by Stage 4 of the vfs-blind-tools-audit-and-fix plan: every file-input
   # MCP tool routes agent-supplied paths through the helper so VFS uploads
   # from a host UI become visible.
-  "kaos-core>=0.1.0rc1,<0.2",
+  "kaos-core>=0.1.0,<0.2",
   "pydantic>=2.11.0",
 ]
 
@@ -56,7 +56,7 @@ dev = [
   "kaos-content[html]>=0.1.0a2",
   # WU-J: bump pin floor to 0.1.0rc1 across kaos-* deps. Re-floor at
   # the GA tag once kaos-nlp-core ships a non-prerelease.
-  "kaos-nlp-core>=0.1.0rc1,<0.2",
+  "kaos-nlp-core>=0.1.0,<0.2",
   # Note: kaos-mcp is intentionally absent from dev at v0.1.0a1.
   # kaos-mcp ships in Wave 3 and is not on PyPI yet; including it
   # here would block ``uv sync`` per F009 lesson #4. Re-add at
@@ -83,7 +83,7 @@ content = [
   # so installations of the [content] extra get the safer parser.
   "kaos-content[html]>=0.1.0a2",
   # WU-J: bump pin floor to 0.1.0rc1 across kaos-* deps.
-  "kaos-nlp-core>=0.1.0rc1,<0.2",
+  "kaos-nlp-core>=0.1.0,<0.2",
 ]
 pacer = [
   "lxml>=5.0.0",
