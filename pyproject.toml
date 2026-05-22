@@ -190,3 +190,7 @@ exclude-newer = "72 hours"
 "kaos-source" = false
 "kaos-tabular" = false
 "kaos-web" = false
+# 2026-05-22 — uploaded within the 72h quarantine but required to
+# close CVE-2026-45409 surfaced by the working pip-audit (uvx swap,
+# kaos-agents 50fdc9b). Pre-fix pip-audit returned false-green.
+"idna" = false      # CVE-2026-45409 (fixed in 3.15)
