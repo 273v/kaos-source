@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — `parsers.metadata.file._detect_mime_from_magic` prefers canonical detector
+
+`_detect_mime_from_magic` (called from `extract_file_metadata` when
+extension-based MIME guess fails) now prefers
+`kaos_nlp_core.content_type.detect()` (0.1.1+) over the in-module
+`_MAGIC_SIGNATURES` table. The canonical detector adds an OPC + OLE
+fallback that correctly disambiguates real DOCX / PPTX / XLSX / DOC /
+XLS / PPT bytes — coverage the in-module table cannot match (it
+maps OPC zips to the generic `application/zip` and OLE compound files
+to a generic `application/x-ole-storage`).
+
+The in-module table remains as a fallback when kaos-nlp-core isn't
+importable at runtime (degraded install) or when the canonical
+detector returns `unknown` for bytes the table happens to recognize
+— strictly additive; no regression for the formats the legacy table
+already handled.
+
+Tracked in `kaos-modules/docs/audits/2026-05-22-content-type-detection-unused.md`
+Fix 3.
+
+
 ## [0.1.0] — 2026-05-20
 
 ### Changed — WU-L of 0.1.0 GA plan
