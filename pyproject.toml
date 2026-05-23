@@ -88,11 +88,12 @@ content = [
 pacer = [
   "lxml>=5.0.0",
 ]
-# Note: the [mcp] extra (pinning kaos-mcp>=0.1.0) is intentionally
-# absent at v0.1.0a1. kaos-mcp ships in Wave 3; ``uv lock`` is strict
-# and refuses to resolve any declared extra whose sibling isn't on
-# PyPI yet (per docs/oss/ F009 lesson #4). Re-add this extra in
-# 0.1.0a2 once kaos-mcp is on PyPI.
+# MCP server — required by the `kaos-source-serve` console script
+# (see `kaos_source.serve`). Install with
+# `pip install kaos-source[mcp]` to run the source MCP server.
+mcp = [
+  "kaos-mcp>=0.1.0,<0.2",
+]
 
 [project.urls]
 Homepage = "https://kelvin.legal"
