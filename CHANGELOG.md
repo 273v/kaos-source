@@ -20,6 +20,13 @@ declared because `kaos-mcp` was not on PyPI when v0.1.0a1 shipped.
 stderr when `kaos-mcp` is unavailable. Closes
 audit-04/kaos-source.md F-001.
 
+### Changed
+
+- `pyproject.toml` classifier bumped from `Development Status :: 3 - Alpha`
+  to `Development Status :: 5 - Production/Stable` to reflect the
+  0.1.0 GA release (WU-L #543) that froze the public API for the
+  0.1.x line. Closes audit-04/kaos-source.md Family D (classifier drift).
+
 ### Changed — `parsers.metadata.file._detect_mime_from_magic` prefers canonical detector
 
 `_detect_mime_from_magic` (called from `extract_file_metadata` when
