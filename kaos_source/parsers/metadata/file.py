@@ -37,6 +37,23 @@ class FileMetadata(BaseModel):
 
 
 # ── Magic bytes → format mapping ────────────────────────────────────
+#
+# Audit Fix 3: the canonical magic-byte detector lives in
+# ``kaos_nlp_core.content_type``; that module's 0.1.1+ release adds an
+# OPC + OLE fallback that correctly disambiguates real DOCX / PPTX /
+# XLSX / DOC / XLS / PPT — coverage this in-module ``_MAGIC_SIGNATURES``
+# table cannot match.
+#
+# We prefer the canonical detector when ``kaos-nlp-core`` is on the
+# path (the kaos-source default install already pulls it in via the
+# package's main dependency line). The in-module fallback table
+# remains so the function stays callable in degraded installs that
+# somehow lack kaos-nlp-core (e.g. partial dependency overrides) —
+# narrower coverage but no crash.
+#
+# Tracked in
+# ``kaos-modules/docs/audits/2026-05-22-content-type-detection-unused.md``
+# Fix 3.
 
 _MAGIC_SIGNATURES: list[tuple[bytes, str]] = [
     (b"%PDF", "application/pdf"),
@@ -59,7 +76,31 @@ _MAGIC_SIGNATURES: list[tuple[bytes, str]] = [
 
 
 def _detect_mime_from_magic(header: bytes) -> str | None:
-    """Detect MIME type from magic bytes."""
+    """Detect MIME type from magic bytes.
+
+    Prefers the canonical ``kaos_nlp_core.content_type.detect`` detector
+    (0.1.1+ ships an OPC + OLE fallback that distinguishes real DOCX /
+    PPTX / XLSX / DOC / XLS / PPT bytes — coverage the legacy fallback
+    table here cannot match). Falls back to the in-module
+    ``_MAGIC_SIGNATURES`` table when kaos-nlp-core is unavailable at
+    runtime (degraded install) or when its detector returns ``unknown``
+    for bytes the table happens to recognize.
+    """
+    if not header:
+        return None
+
+    try:
+        from kaos_nlp_core.content_type import detect
+    except ImportError:
+        # kaos-nlp-core unavailable — fall through to the legacy table.
+        pass
+    else:
+        result = detect(header)
+        if result.mime_type:
+            return result.mime_type
+        # Detector returned group="unknown" — try the legacy table on
+        # the chance it recognizes something infer doesn't.
+
     for magic, mime in _MAGIC_SIGNATURES:
         if header.startswith(magic):
             return mime
