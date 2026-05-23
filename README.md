@@ -133,7 +133,7 @@ kaos-source-serve --http --port 8765                        # MCP server (stdio 
 | **Python** | 3.13, 3.14 (informational matrix entries for 3.14t free-threaded and 3.15-dev) |
 | **OS** | Linux, macOS, Windows (pure-Python wheel; no native code) |
 | **Maturity** | 0.1.0 GA. The public API is documented in `kaos_source.__all__` (56 symbols). |
-| **Stability policy** | Pre-1.0: minor bumps may change behaviour. Every change is documented in [`CHANGELOG.md`](CHANGELOG.md). The MCP tool surface, `KAOS_SOURCE_*` and `KAOS_SECURITY_*` environment-variable namespaces are public API. |
+| **Stability policy** | 0.1.x is the public-API-frozen line — no breaking changes until 0.2.0. Patch releases are additive or bug-fix only. Every change is documented in [`CHANGELOG.md`](CHANGELOG.md). The MCP tool surface, `KAOS_SOURCE_*` and `KAOS_SECURITY_*` environment-variable namespaces are public API. |
 | **Test coverage** | 411 unit tests across connectors, API clients, parsers, settings, and security regressions. Live integration tests gated behind `--include-live`. |
 | **Type checker** | Validated with [`ty`](https://docs.astral.sh/ty/), Astral's Python type checker. |
 
