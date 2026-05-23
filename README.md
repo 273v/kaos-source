@@ -8,7 +8,7 @@
 [![PyPI - Version](https://img.shields.io/pypi/v/kaos-source)](https://pypi.org/project/kaos-source/)
 [![Python](https://img.shields.io/pypi/pyversions/kaos-source)](https://pypi.org/project/kaos-source/)
 [![License](https://img.shields.io/pypi/l/kaos-source)](https://github.com/273v/kaos-source/blob/main/LICENSE)
-[![CI](https://github.com/273v/kaos-source/actions/workflows/ci.yml/badge.svg)](https://github.com/273v/kaos-source/actions/workflows/ci.yml)
+[![quality](https://github.com/273v/kaos-source/actions/workflows/quality.yml/badge.svg)](https://github.com/273v/kaos-source/actions/workflows/quality.yml)
 
 `kaos-source` is the **source discovery and materialization** layer for KAOS —
 filesystem, archive, HTTP, and browser transport connectors, plus REST clients
