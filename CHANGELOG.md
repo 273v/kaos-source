@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `[mcp]` extra declared
+
+Declared `[mcp] = ["kaos-mcp>=0.1.0,<0.2"]`. The `kaos-source-serve`
+console script, the README MCP-launcher section, and
+`kaos_source/serve.py`'s error message all advertised
+`pip install 'kaos-source[mcp]'`, but the extra itself was not
+declared because `kaos-mcp` was not on PyPI when v0.1.0a1 shipped.
+`tests/unit/test_serve_install_contract.py` pins the failure path:
+`kaos-source-serve` exits 1 with `[mcp]` and `kaos-source[mcp]` in
+stderr when `kaos-mcp` is unavailable. Closes
+audit-04/kaos-source.md F-001.
+
 ### Changed — `parsers.metadata.file._detect_mime_from_magic` prefers canonical detector
 
 `_detect_mime_from_magic` (called from `extract_file_metadata` when
