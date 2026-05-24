@@ -264,8 +264,15 @@ async def test_non_html_response_skips_fingerprint_sniff(runtime: KaosRuntime) -
 async def test_fetchurl_tool_returns_install_hint_when_playwright_missing(
     runtime: KaosRuntime, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """When httpx hits a challenge AND playwright isn't installed, the
-    tool returns a clear ToolResult error pointing at the [browser] extra.
+    """When use_browser=False AND httpx hits a challenge AND playwright
+    isn't installed, the tool returns a clear ToolResult error pointing
+    at the [browser] extra.
+
+    Post-0.1.2: the default Playwright-first flow means callers must
+    explicitly opt out (``use_browser=False``) to exercise the
+    httpx-first-then-fallback path. The install-hint surface only
+    fires in that opt-out flow when the operator has
+    ``enable_browser_fallback=True`` and httpx hits anti-bot.
     """
     # Force the playwright import to fail even if it's installed in dev.
     monkeypatch.setitem(sys.modules, "playwright.async_api", None)
@@ -284,7 +291,11 @@ async def test_fetchurl_tool_returns_install_hint_when_playwright_missing(
 
     tool = FetchURLTool()
     context = _context(runtime)
-    result = await tool.execute({"url": "https://example.com/blocked"}, context)
+    # use_browser=False explicitly opts into the legacy
+    # httpx-first-then-browser-fallback flow.
+    result = await tool.execute(
+        {"url": "https://example.com/blocked", "use_browser": False}, context
+    )
 
     assert result.isError is True
     err = result.text or ""
@@ -295,9 +306,14 @@ async def test_fetchurl_tool_returns_install_hint_when_playwright_missing(
 async def test_fetchurl_tool_falls_back_to_browser_on_antibot(
     runtime: KaosRuntime, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Happy-path fallback: httpx hits a 403, the tool re-fetches via a
-    mocked Playwright connector, and the structured_content reports
-    ``fetch_path=playwright``.
+    """Legacy fallback path: use_browser=False, httpx hits a 403, the
+    tool re-fetches via a mocked Playwright connector, and the
+    structured_content reports ``fetch_path=playwright``.
+
+    Post-0.1.2 the default Playwright-first flow makes this path the
+    explicit opt-in: the caller passes ``use_browser=False`` to start
+    on httpx, and ``enable_browser_fallback=True`` (default) still
+    fires the browser-on-antibot escalation.
     """
     # Mocked Playwright surface — reuse the fakes from the connector
     # smoke test rather than dragging Playwright into the unit lane.
@@ -351,9 +367,169 @@ async def test_fetchurl_tool_falls_back_to_browser_on_antibot(
 
     tool = FetchURLTool()
     context = _context(runtime)
-    result = await tool.execute({"url": "https://example.com/blocked"}, context)
+    # use_browser=False forces the legacy httpx-first path; the 403
+    # then escalates to the Playwright fallback per
+    # enable_browser_fallback (default True).
+    result = await tool.execute(
+        {"url": "https://example.com/blocked", "use_browser": False}, context
+    )
 
     assert result.isError is False, result.text or "no error text"
     sc = result.structuredContent or {}
     assert sc.get("fetch_path") == "playwright"
     assert sc.get("fallback_reason") == "http_403"
+
+
+# ---------------------------------------------------------------------------
+# 2026-05-24: Playwright-default routing (task #634)
+# ---------------------------------------------------------------------------
+
+
+def test_fetchurl_use_browser_schema_default_is_none() -> None:
+    """Schema default must be None for Playwright-first auto-detection.
+
+    Regressing to False or True would lock the agent into one fetcher.
+    Mirrors the kaos-web pattern.
+    """
+    tool = FetchURLTool()
+    use_browser_params = [p for p in tool.metadata.input_schema if p.name == "use_browser"]
+    assert len(use_browser_params) == 1
+    param = use_browser_params[0]
+    assert param.default is None
+    assert param.required is False
+    assert "Playwright" in (param.description or "")
+
+
+def test_resolve_use_browser_for_source_honors_explicit_values() -> None:
+    from kaos_source.runtime.tools import _resolve_use_browser_for_source
+
+    assert _resolve_use_browser_for_source(True) is True
+    assert _resolve_use_browser_for_source(False) is False
+
+
+def test_resolve_use_browser_for_source_none_with_playwright_returns_true(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import types
+
+    from kaos_source.runtime.tools import _resolve_use_browser_for_source
+
+    fake_pkg = types.ModuleType("playwright")
+    fake_api = types.ModuleType("playwright.async_api")
+    monkeypatch.setitem(sys.modules, "playwright", fake_pkg)
+    monkeypatch.setitem(sys.modules, "playwright.async_api", fake_api)
+    assert _resolve_use_browser_for_source(None) is True
+
+
+def test_resolve_use_browser_for_source_none_without_playwright_returns_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from kaos_source.runtime.tools import _resolve_use_browser_for_source
+
+    monkeypatch.setitem(sys.modules, "playwright.async_api", None)
+    assert _resolve_use_browser_for_source(None) is False
+
+
+async def test_fetchurl_default_routes_through_browser_when_playwright_importable(
+    runtime: KaosRuntime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With use_browser=None (default) and Playwright importable, the
+    tool routes through BrowserConnector FIRST. No httpx call should
+    happen on the success path.
+    """
+    from tests.unit._fake_playwright import FakePageState, FakePlaywrightManager
+
+    pages = {
+        "https://example.com/page": FakePageState(
+            final_url="https://example.com/page",
+            status=200,
+            title="Browser",
+            html="<html><body><h1>browser content</h1></body></html>",
+            headers={"content-type": "text/html; charset=utf-8"},
+            screenshot=b"\x89PNGfake",
+        )
+    }
+
+    import types
+
+    fake_module = types.ModuleType("playwright.async_api")
+    setattr(  # noqa: B010
+        fake_module,
+        "async_playwright",
+        lambda: FakePlaywrightManager(pages),
+    )
+    monkeypatch.setitem(sys.modules, "playwright", types.ModuleType("playwright"))
+    monkeypatch.setitem(sys.modules, "playwright.async_api", fake_module)
+
+    from kaos_source.connectors import browser as browser_mod
+    from kaos_source.runtime import tools as tools_mod
+
+    # Sentinel transport that fails the test if reached — httpx should
+    # NOT be called on the default-browser success path.
+    class _ExplodeTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            raise AssertionError(
+                "httpx connector reached on default Playwright-first path; "
+                "regression — task #634 expects browser-first routing"
+            )
+
+    monkeypatch.setattr(
+        tools_mod,
+        "_get_service",
+        lambda: SourceService(connectors=[HttpConnector(transport=_ExplodeTransport())]),
+    )
+
+    original_browser_init = browser_mod.BrowserConnector.__init__
+
+    def _patched_init(self: Any, **kwargs: Any) -> None:
+        kwargs["playwright_factory"] = lambda: FakePlaywrightManager(pages)
+        kwargs["take_screenshot"] = False
+        original_browser_init(self, **kwargs)
+
+    monkeypatch.setattr(browser_mod.BrowserConnector, "__init__", _patched_init)
+
+    tool = FetchURLTool()
+    context = _context(runtime)
+    # No use_browser key → default Playwright-first routing.
+    result = await tool.execute({"url": "https://example.com/page"}, context)
+
+    assert result.isError is False, result.text or "no error text"
+    sc = result.structuredContent or {}
+    assert sc.get("fetch_path") == "playwright"
+    # fallback_reason is None on the default path (not a fallback from anti-bot).
+    assert sc.get("fallback_reason") is None
+
+
+async def test_fetchurl_use_browser_true_forces_browser_no_httpx_fallback(
+    runtime: KaosRuntime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the caller forces use_browser=True and the browser path
+    fails (e.g. Playwright not installed), the tool returns the browser
+    error directly — NOT a silent httpx downgrade.
+    """
+    monkeypatch.setitem(sys.modules, "playwright.async_api", None)
+
+    from kaos_source.runtime import tools as tools_mod
+
+    class _ExplodeTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            raise AssertionError(
+                "httpx reached on forced use_browser=True path; should not silently downgrade"
+            )
+
+    monkeypatch.setattr(
+        tools_mod,
+        "_get_service",
+        lambda: SourceService(connectors=[HttpConnector(transport=_ExplodeTransport())]),
+    )
+
+    tool = FetchURLTool()
+    context = _context(runtime)
+    result = await tool.execute(
+        {"url": "https://example.com/blocked", "use_browser": True}, context
+    )
+
+    assert result.isError is True
+    err = result.text or ""
+    # The error must point at the [browser] extra install hint.
+    assert "kaos-source[browser]" in err

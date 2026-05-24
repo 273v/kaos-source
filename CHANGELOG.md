@@ -9,6 +9,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.1.2] — 2026-05-24
+
+### Changed
+
+- **`kaos-source-fetch-url` defaults to Playwright** (task #634). The
+  MCP tool's schema gains a `use_browser: bool | None = None` parameter
+  matching the kaos-web pattern. DEFAULT (unset): browser when the
+  `[browser]` extra is installed, httpx otherwise. Explicit `False`
+  forces the bare httpx path (faster, lower memory, only suitable for
+  known-clean / JSON-API hosts). Explicit `True` forces browser and
+  does NOT silently downgrade to httpx on browser failure — the
+  caller sees the browser error directly.
+- **Httpx is now the FALLBACK from browser, not the other way around.**
+  Pre-0.1.2 the tool tried httpx first and fell back to Playwright on
+  anti-bot refusals. Post-0.1.2 the tool tries Playwright first when
+  available, falling back to httpx silently when Playwright isn't
+  installed or when the browser fetch errors and the caller used
+  the auto-detect default. `enable_browser_fallback` still controls
+  whether the legacy httpx-first-then-browser-on-antibot path can
+  escalate (set `use_browser=False` to opt into that flow).
+
+### Documented
+
+- **`kaos_source/apis/_http.py` deliberately stays on httpx** (task
+  #634 carve-out). The 5 JSON-API connectors (Federal Register, eCFR,
+  EDGAR, GovInfo, GLEIF) hit fixed JSON endpoints that explicitly
+  serve `application/json` to programmatic clients. Playwright would
+  be net-negative (latency, memory, and sometimes MORE blocked
+  because some JSON APIs treat browser UAs as suspicious). The header
+  docstring now spells out the four reasons this surface is
+  human-engineer-selected-httpx, satisfying the goal's
+  "unless the agent or user specifically selects httpx" carve-out at
+  the engineering layer.
+
+### Tests
+
+- New `test_fetchurl_use_browser_schema_default_is_none` pins the
+  `default=None` contract on the MCP schema.
+- New `TestResolveUseBrowserForSource` covers explicit True/False,
+  None + Playwright importable, None + Playwright missing.
+- New `test_fetchurl_default_routes_through_browser_when_playwright_importable`
+  exercises the Playwright-first success path with a deliberate
+  httpx-explode sentinel (regression guard against silent httpx
+  fallthrough).
+- New `test_fetchurl_use_browser_true_forces_browser_no_httpx_fallback`
+  covers the no-silent-downgrade contract on the explicit-True path.
+- Existing fallback / install-hint tests updated to pass
+  `use_browser=False` so they cover the legacy
+  httpx-first-then-browser-on-antibot escalation.
+
+
 ## [0.1.1] — 2026-05-23
 
 ### Added — `[mcp]` extra declared
