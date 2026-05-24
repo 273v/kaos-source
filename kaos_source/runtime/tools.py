@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from kaos_core import KaosContext, KaosRuntime, KaosTool, ToolMetadata, ToolResult
+from kaos_core.logging import get_logger
 from kaos_core.types.annotations import ToolAnnotations
 from kaos_core.types.enums import ToolCapability, ToolCategory
 from kaos_core.types.parameters import ParameterSchema
@@ -19,6 +20,8 @@ from kaos_source._path_resolver import (
     ResolvedOrigin,
     resolve_source_input,
 )
+
+logger = get_logger(__name__)
 
 _KAOS_URI_PREFIX = "kaos://"
 
@@ -519,13 +522,16 @@ class FetchURLTool(KaosTool):
             name="kaos-source-fetch-url",
             display_name="Fetch URL",
             description=(
-                "Fetch content from an HTTP/HTTPS URL and materialize it as an artifact. "
-                "Returns metadata and artifact ID. Sends a realistic desktop Chrome "
-                "User-Agent + browser-shaped headers by default; on anti-bot refusals "
-                "(HTTP 403/451 or Cloudflare/captcha challenge HTML) falls back to a "
-                "Playwright-driven fetch when the [browser] extra is installed. "
-                "For web page extraction with readability and HTML-to-AST, use "
-                "kaos-web tools instead."
+                "Fetch content from an HTTP/HTTPS URL and materialize it as an "
+                "artifact. Returns metadata and artifact ID. DEFAULT routing: "
+                "Playwright with a realistic browser fingerprint when the "
+                "[browser] extra is installed — passes Cloudflare, SEC.gov, "
+                "FederalRegister, eCFR, Investopedia, and most anti-bot tiers. "
+                "Falls back to bare httpx (realistic Chrome UA + browser-shaped "
+                "headers) when Playwright isn't installed, when the caller "
+                "passes use_browser=false, or when the browser path itself "
+                "errors. For web page extraction with readability + HTML-to-AST, "
+                "use kaos-web tools instead."
             ),
             category=ToolCategory.DATA,
             capability=ToolCapability.EXTRACT,
@@ -537,6 +543,25 @@ class FetchURLTool(KaosTool):
                     name="url",
                     type="string",
                     description="HTTP or HTTPS URL to fetch.",
+                ),
+                ParameterSchema(
+                    name="use_browser",
+                    type="boolean",
+                    description=(
+                        "Fetcher selection. DEFAULT (unset): Playwright with "
+                        "full browser fingerprint when the [browser] extra is "
+                        "installed — passes Cloudflare, SEC.gov, "
+                        "FederalRegister, eCFR, Investopedia, and most "
+                        "anti-bot tiers. Set false to force the bare httpx "
+                        "path (faster, lower memory, but blocked by most "
+                        "major news/regulator sites — only use for JSON APIs "
+                        "and known-clean hosts). Set true to force browser "
+                        "even when a httpx fast-path exists. Mirrors the "
+                        "kaos-web-fetch-page contract so the agent surface "
+                        "is uniform across packages."
+                    ),
+                    required=False,
+                    default=None,
                 ),
                 ParameterSchema(
                     name="name",
@@ -573,29 +598,73 @@ class FetchURLTool(KaosTool):
                 "FetchURL requires a KaosRuntime with artifact storage."
             )
 
-        from kaos_source.models import SourceLocator
-        from kaos_source.options import SourceMaterializeOptions
-
         try:
-            locator = SourceLocator.http(url)
+            locator = _http_locator(url)
         except Exception as exc:
             return ToolResult.create_error(
                 f"Invalid URL: {url}. {exc}. URL must use http:// or https:// scheme."
             )
 
-        service = _get_service()
-        options = SourceMaterializeOptions(artifact_name=inputs.get("name"))
+        # 2026-05-24: Playwright-default routing per goal in task #634.
+        # Mirrors kaos-web's contract: ``None`` probes for [browser]
+        # extra; explicit True forces browser; explicit False forces
+        # httpx. ``enable_browser_fallback`` still gates whether httpx
+        # ever falls back to browser on a 403/anti-bot — but the
+        # default flow now starts on browser, with httpx as the
+        # fallback when browser is unavailable or errors.
+        use_browser = inputs.get("use_browser")
+        effective_use_browser = _resolve_use_browser_for_source(use_browser)
 
         from kaos_source.errors import SourceAntiBotChallengeError
         from kaos_source.settings import KaosSourceHttpSettings
 
+        if effective_use_browser:
+            # Browser-first path. If the browser fetch fails for any
+            # reason (Playwright not installed, navigation error, host
+            # explicitly refusing Playwright), fall back to httpx
+            # unless the caller explicitly forced use_browser=True.
+            browser_result = await self._fetch_via_browser(
+                url=url,
+                inputs=inputs,
+                context=context,
+                trigger=None,
+            )
+            if not getattr(browser_result, "isError", False):
+                return browser_result
+            if use_browser is True:
+                # Caller explicitly forced browser — do not silently
+                # downgrade. Surface the browser error.
+                return browser_result
+            # Auto-detect path: fall through to httpx with the original
+            # browser error captured as the fallback reason.
+            logger.warning(
+                "kaos-source-fetch-url: browser path failed for %s; falling back to httpx",
+                url,
+            )
+
         try:
-            result = await service.materialize(locator, context, options)
+            result = await _get_service().materialize(
+                locator,
+                context,
+                _materialize_options(inputs),
+            )
         except SourceAntiBotChallengeError as exc:
             # Issue #444 — host either returned an explicit refusal
             # status (403 / 451) or HTML matching a known anti-bot
-            # interstitial fingerprint. Fall back to a Playwright
-            # browser fetch if the operator opted in.
+            # interstitial fingerprint. Behavior matrix:
+            #
+            # * ``use_browser=None`` + ``enable_browser_fallback=True``:
+            #   the browser-first path above already ran and either
+            #   succeeded or returned an error (we never reach here on
+            #   the auto-detect+Playwright path because httpx is the
+            #   fallback). In the rare case where Playwright wasn't
+            #   importable and httpx then hit anti-bot, retry on
+            #   browser (which will return the install hint).
+            # * ``use_browser=False`` + ``enable_browser_fallback=True``:
+            #   legacy flow — start on httpx, escalate to browser on
+            #   anti-bot. Preserves the pre-0.1.2 escape hatch.
+            # * Either above with ``enable_browser_fallback=False``:
+            #   surface the structured anti-bot error to the caller.
             http_settings = KaosSourceHttpSettings.from_context(context)
             if not http_settings.enable_browser_fallback:
                 return ToolResult.create_error(
@@ -641,14 +710,22 @@ class FetchURLTool(KaosTool):
         context: KaosContext,
         trigger: Any,
     ) -> ToolResult:
-        """Playwright fallback path for the FetchURL tool.
+        """Playwright path for the FetchURL tool.
 
         Builds a one-shot :class:`BrowserConnector`-backed service,
-        re-runs ``materialize`` against the same URL, and surfaces a
+        runs ``materialize`` against the same URL, and surfaces a
         clear error if the optional ``[browser]`` extra isn't
         installed (the Playwright import fails inside the connector).
+
+        Pre-0.1.2 this was the fallback path triggered only on an
+        anti-bot refusal from the httpx connector. Post-0.1.2 it is
+        the DEFAULT path (Playwright-first) per the kaos-web /
+        kaos-source / kaos-agents Playwright-default goal — see task
+        #634. ``trigger`` is ``None`` when the browser path runs as
+        the default and a :class:`SourceAntiBotChallengeError` when
+        it runs as the secondary fallback from the httpx path.
         """
-        fp_value = "anti-bot"
+        fp_value: str | None = None
         details = getattr(trigger, "details", None)
         if isinstance(details, dict):
             raw_fp = details.get("fingerprint")
@@ -661,40 +738,39 @@ class FetchURLTool(KaosTool):
             importlib.import_module("playwright.async_api")
         except ImportError:
             return ToolResult.create_error(
-                f"Fetch failed for '{url}': blocked by anti-bot challenge "
-                f"(fingerprint={fp_value!r}). Playwright is required to bypass "
-                "this kind of refusal, but the [browser] extra is not "
+                f"Fetch failed for '{url}': Playwright is required for "
+                "browser-mode fetching but the [browser] extra is not "
                 "installed.\n\n"
                 "Install it with:\n\n"
                 "    pip install 'kaos-source[browser]'\n"
                 "    python -m playwright install chromium\n\n"
-                "Then retry the same kaos-source-fetch-url call. The "
-                "host can still legitimately refuse Playwright; if so, "
-                "the next error will state that explicitly."
+                "Or pass use_browser=false to force the bare httpx path."
             )
 
         from kaos_source.connectors.browser import BrowserConnector
         from kaos_source.models import SourceLocator
-        from kaos_source.options import SourceMaterializeOptions
         from kaos_source.runtime.service import SourceService
 
         browser_service = SourceService(connectors=[BrowserConnector()])
         browser_locator = SourceLocator.browser(url)
-        options = SourceMaterializeOptions(artifact_name=inputs.get("name"))
 
         try:
-            result = await browser_service.materialize(browser_locator, context, options)
+            result = await browser_service.materialize(
+                browser_locator, context, _materialize_options(inputs)
+            )
         except Exception as exc:
+            reason = fp_value or "browser-default"
             return ToolResult.create_error(
-                f"Fetch failed for '{url}': httpx hit an anti-bot challenge "
-                f"(fingerprint={fp_value!r}) and the Playwright fallback also "
-                f"failed: {exc}. The host may be blocking automated access "
-                "regardless of browser type, or Playwright's browser binaries "
-                "may not be installed (run `python -m playwright install chromium`)."
+                f"Fetch failed for '{url}' via Playwright "
+                f"(reason={reason!r}): {exc}. The host may be blocking "
+                "automated access regardless of browser type, or Playwright's "
+                "browser binaries may not be installed (run "
+                "`python -m playwright install chromium`). Try "
+                "use_browser=false to fall back to the httpx path."
             )
 
         return result.manifest.to_tool_result(
-            summary=f"Fetched {browser_locator.name} via browser fallback "
+            summary=f"Fetched {browser_locator.name} via browser "
             f"({_format_size(result.bytes_written)})",
             structured_content={
                 "artifact_id": result.artifact_ref.artifact_id,
@@ -708,6 +784,39 @@ class FetchURLTool(KaosTool):
                 "fallback_reason": fp_value,
             },
         )
+
+
+def _http_locator(url: str) -> Any:
+    """Wrap ``SourceLocator.http`` so the lazy import is contained."""
+    from kaos_source.models import SourceLocator
+
+    return SourceLocator.http(url)
+
+
+def _materialize_options(inputs: dict[str, Any]) -> Any:
+    """Construct ``SourceMaterializeOptions`` with the optional artifact name."""
+    from kaos_source.options import SourceMaterializeOptions
+
+    return SourceMaterializeOptions(artifact_name=inputs.get("name"))
+
+
+def _resolve_use_browser_for_source(use_browser: bool | None) -> bool:
+    """Playwright-default resolver for kaos-source.
+
+    Mirrors :func:`kaos_web.discover.batch._resolve_use_browser` so
+    kaos-source and kaos-web share the same routing contract. ``True``
+    / ``False`` are honored literally; ``None`` probes for the
+    ``[browser]`` extra and returns True when Playwright is importable.
+    """
+    if use_browser is not None:
+        return use_browser
+    try:
+        import importlib
+
+        importlib.import_module("playwright.async_api")
+        return True
+    except ImportError:
+        return False
 
 
 class InspectArchiveTool(KaosTool):
