@@ -277,7 +277,7 @@ class HttpConnector(SourceConnector):
                             "HTTP request failed after %d attempts: %s — %s", attempt + 1, url, exc
                         )
                         raise
-                    logger.info(
+                    logger.debug(
                         "Retrying %s (attempt %d/%d): %s", url, attempt + 2, retry_limit + 1, exc
                     )
                     await asyncio.sleep(self._retry_delay_seconds(attempt, exc.details, s))
@@ -291,7 +291,7 @@ class HttpConnector(SourceConnector):
                             locator=url,
                             timeout_seconds=timeout,
                         ) from exc
-                    logger.info(
+                    logger.debug(
                         "Retrying %s after timeout (attempt %d/%d)",
                         url,
                         attempt + 2,
@@ -308,7 +308,7 @@ class HttpConnector(SourceConnector):
                             locator=url,
                             error=str(exc),
                         ) from exc
-                    logger.info(
+                    logger.debug(
                         "Retrying %s after error (attempt %d/%d): %s",
                         url,
                         attempt + 2,
