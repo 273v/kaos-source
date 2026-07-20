@@ -135,7 +135,7 @@ class TestMetadataValidation:
     def test_metadata_is_frozen(self) -> None:
         meta = ApiMetadata(name="x", description="y")
         with pytest.raises(ValidationError):
-            meta.name = "z"
+            meta.name = "z"  # ty: ignore[invalid-assignment]
 
 
 class TestApiConnectorAbc:
