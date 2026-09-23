@@ -92,7 +92,7 @@ pacer = [
 # (see `kaos_source.serve`). Install with
 # `pip install kaos-source[mcp]` to run the source MCP server.
 mcp = [
-  "kaos-mcp>=0.1.0,<0.2",
+  "kaos-mcp>=0.1.5,<0.2",
 ]
 
 [project.urls]
