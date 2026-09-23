@@ -169,10 +169,15 @@ class TestApiConnectorAbc:
         assert SourceCapability.SEARCH in meta.capabilities
 
 
+def _instantiate(cls: type[SourceParser]) -> SourceParser:
+    """Call ``cls()`` through ``type[...]`` so the runtime ABC check is exercised."""
+    return cls()
+
+
 class TestSourceParserAbc:
     def test_cannot_instantiate_without_supported_mime_types(self) -> None:
         with pytest.raises(TypeError, match="supported_mime_types"):
-            SourceParser()
+            _instantiate(SourceParser)
 
     def test_concrete_subclass_instantiates(self) -> None:
         parser = _DemoParser()
